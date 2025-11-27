@@ -194,8 +194,10 @@ def main():
     )
     model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
-    world_size = int(os.environ.get("WORLD_SIZE", 1))
-    global_rank = torch.distributed.get_rank()
+    # world_size = int(os.environ.get("WORLD_SIZE", 1))
+    # global_rank = torch.distributed.get_rank()
+    world_size = 1
+    global_rank = 0
     log_file = os.path.join(training_args.output_dir, "print_log.txt")
 
     # Setup logging
@@ -246,11 +248,16 @@ def main():
     set_seed(training_args.seed)
     training_args.data_seed = training_args.seed
 
-    torch_dtype = (
-        model_args.torch_dtype
-        if model_args.torch_dtype in ["auto", None]
-        else getattr(torch, model_args.torch_dtype)
-    )
+    # torch_dtype = (
+    #     model_args.torch_dtype
+    #     if model_args.torch_dtype in ["auto", None]
+    #     else getattr(torch, model_args.torch_dtype)
+    # )
+    torch_dtype = torch.float16 
+
+    device = "mps" if torch.backends.mps.is_available() else "cpu"
+    model.to(device)
+    
     # int8 is not compatible with DeepSpeed (require not to pass device_map)
     if training_args.use_int8_training:
         print_rank_0(
@@ -258,22 +265,25 @@ def main():
             log_file,
             global_rank
         )
-        device_map = (
-            {"": int(os.environ.get("LOCAL_RANK") or 0)}
-            if world_size != 1 else "auto"
-        )
+        # device_map = (
+        #     {"": int(os.environ.get("LOCAL_RANK") or 0)}
+        #     if world_size != 1 else "auto"
+        # )
+
         # device_map = "auto"
         model = AutoModelForCausalLM.from_pretrained(
             model_args.model_name_or_path,
             load_in_8bit=True,  # xxx: int8 load in
-            device_map=device_map,  # xxx: int8 requires passing device_map
+            # device_map=device_map,  # xxx: int8 requires passing device_map
             torch_dtype=torch_dtype,
         )
+        model.to(device)
     else:
         model = AutoModelForCausalLM.from_pretrained(
             model_args.model_name_or_path,
             torch_dtype=torch_dtype,
         )
+        model.to(device)
 
     if model_args.llama:
         tokenizer = LlamaTokenizer.from_pretrained(
