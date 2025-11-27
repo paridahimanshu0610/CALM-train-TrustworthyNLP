@@ -7,22 +7,22 @@ export CUDA_VISIBLE_DEVICES='0,1,2,3'  # Full
 export WANDB_PROJECT=CRA-llama2-7b-chat
 export WANDB_RUN_ID=CRA_0.045M
 export WANDB_RESUME=allow
-export ABS_PATH=""
-export PYTHONPATH="path_to/train"
+export ABS_PATH="/Users/himanshu/Documents/Projects/CALM-train-TrustworthyNLP"
+export PYTHONPATH="/Users/himanshu/Documents/Projects/CALM-train-TrustworthyNLP/train"
 export WANDB_SERVER_PORT=10086
 export WANDB_API_KEY=WANDB_API_KEY
-model_name_or_path="path_to/llama-2-7b-chat-T"
+model_name_or_path="/Users/himanshu/Documents/Projects/CALM-train-TrustworthyNLP/models/Llama-2-7b-chat-hf"
 
-train_file="path_to/CRA-resample-train4w.json"
-validation_file="path_to/CRA-resample-dev3k.json"
-output_dir="$ABS_PATH/saved_models2/${WANDB_PROJECT}_${WANDB_RUN_ID}"
+train_file='/Users/himanshu/Documents/Projects/CALM-train-TrustworthyNLP/train/data/CRA-resample-train4w.json'
+validation_file='/Users/himanshu/Documents/Projects/CALM-train-TrustworthyNLP/train/data/CRA-resample-dev3k.json'
+output_dir="$ABS_PATH/train/saved_models2/${WANDB_PROJECT}_${WANDB_RUN_ID}"
 mkdir -p ${output_dir}
 
-cache_dir="path_to/hf_cache_dir_2"    # 代表缓存数据处理过程的路径
-log_dir="/path_to/train_log_dir_2"
+cache_dir="$PYTHONPATH/hf_cache_dir_2"    # The path representing the cached data processing procedure
+log_dir="$PYTHONPATH/train_log_dir_2"
 mkdir -p ${cache_dir}
 mkdir -p ${log_dir}
-cutoff_len=2048  #  最长输入序列长度（LLaMA模型建议设置为1024以上，Bloom模型设置为512以上）
+cutoff_len=2048  #  The maximum input sequence length (LLaMA models recommend setting it above 1024, Bloom models above 512)
 echo ${log_dir}
 
 # LoRA without 8bit
