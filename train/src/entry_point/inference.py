@@ -25,10 +25,10 @@ generation_config = dict(
 )
 
 instruction_list = [
-    "Human: \n小明有12个橙子，他想把它们分给他的4个朋友，每人分到的橙子数量相同，每人能分到几个橙子？\n\nAssistant:\n",
-    "Human: \n以下是一道小学数学题：小明家里有 3 只宠物猫和 2 只宠物狗，小花家里有 4 只宠物猫和 1 只宠物狗，谁家里宠物更多？\n\nAssistant:\n",
-    "Human: \n题目：小明有5个球，他送给小红2个球，还剩多少个球？\n\nAssistant:\n",
-    "Human: \n请问2+3等于几？\n\nAssistant:\n"
+    "Human: \nXiaoming has 12 oranges. He wants to share them equally among his 4 friends. How many oranges does each person get? \n\nAssistant:\n",
+    "Human: \nHere is an elementary school math problem: Xiaoming has 3 pet cats and 2 pet dogs, while Xiaohua has 4 pet cats and 1 pet dog. Who has more pets?\n\nAssistant:\n",
+    "Human: \nProblem: Xiaoming has 5 balls, he gives 2 balls to Xiaohong, how many balls does he have left?\n\nAssistant:\n",
+    "Human: \nWhat is 2+3?\n\nAssistant:\n"
 ]
 
 
