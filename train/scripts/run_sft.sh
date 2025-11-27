@@ -11,6 +11,7 @@ model_name_or_path="$ABS_PATH/models/Llama-2-7b-chat-hf"
 train_file="$ABS_PATH/train/data/CRA-resample-train4w.json"
 validation_file="$ABS_PATH/train/data/CRA-resample-dev3k.json"
 output_dir="$ABS_PATH/train/saved_models2/llama2_m4_lora"
+lora_config_llama="$ABS_PATH/train/configs/lora_config_llama.json"
 mkdir -p ${output_dir}
 
 cache_dir="$PYTHONPATH/hf_cache_dir_2"
@@ -31,7 +32,7 @@ weight_decay=1e-5
 warmup_ratio=0.01
 lr_scheduler_type="cosine"
 logging_steps=10
-evaluation_strategy="steps"
+# evaluation_strategy="steps"
 save_total_limit=3
 gradient_checkpointing=True
 use_lora=True
@@ -42,10 +43,11 @@ bf16=False  # MPS does not support bf16; float16 or float32 only
 # =========================
 echo "Starting LoRA training on Mac M4 (MPS)..."
 
-python3 src/entry_point/sft_train.py \
+python3 /Users/himanshu/Documents/Projects/CALM-train-TrustworthyNLP/train/src/entry_point/sft_train.py \
     --model_name_or_path ${model_name_or_path} \
     --llama True \
     --use_lora ${use_lora} \
+    --lora_config ${lora_config_llama} \
     --train_file ${train_file} \
     --validation_file ${validation_file} \
     --per_device_train_batch_size ${per_device_train_batch_size} \
@@ -60,7 +62,6 @@ python3 src/entry_point/sft_train.py \
     --warmup_ratio ${warmup_ratio} \
     --lr_scheduler_type ${lr_scheduler_type} \
     --logging_steps ${logging_steps} \
-    --evaluation_strategy ${evaluation_strategy} \
     --seed 1234 \
     --gradient_checkpointing ${gradient_checkpointing} \
     --cache_dir ${cache_dir} \

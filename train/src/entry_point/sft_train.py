@@ -1,11 +1,12 @@
 
+from html import parser
 from transformers.utils import add_start_docstrings
 from transformers.trainer_utils import get_last_checkpoint
 from transformers.trainer_pt_utils import torch_distributed_zero_first
 from transformers import (AutoModelForCausalLM, AutoTokenizer,
                           HfArgumentParser, LlamaTokenizer, TrainingArguments,
                           set_seed)
-from peft import LoraConfig, get_peft_model, prepare_model_for_int8_training
+from peft import LoraConfig, get_peft_model
 from datasets import load_dataset
 import transformers
 import torch
@@ -123,62 +124,71 @@ class DataArguments:
         },
     )
 
-
 @dataclass
-@add_start_docstrings(TrainingArguments.__doc__)
-class TrainingArguments(TrainingArguments):
-    model_max_length: int = field(
-        default=512,
-        metadata={"help": "Maximum sequence length."},
-    )
-    use_lora: bool = field(
-        default=False,
-        metadata={"help": "Whether to use LoRA."}
-    )
-    use_int8_training: bool = field(
-        default=False, metadata={"help": "Whether to use int8 training."}
-    )
-    lora_config: Optional[str] = field(
-        default=None,
-        metadata={"help": "LoRA config file."},
-    )
-    ddp_find_unused_parameters: bool = field(
-        default=False, metadata={"help": "ddp_find_unused_parameters"}
-    )
-    gradient_checkpointing: bool = field(
-        default=False, metadata={"help": "gradient_checkpointing"}
-    )
-    # https://discuss.huggingface.co/t/wandb-does-not-display-train-eval-loss-except-for-last-one/9170
-    evaluation_strategy: str = field(
-        default="steps", metadata={"help": "The evaluation strategy to use."}
-    )
-    save_total_limit: Optional[int] = field(
-        default=3,
-        metadata={
-            "help": (
-                "If a value is passed, will limit the total amount of checkpoints. Deletes the older checkpoints in"
-                " `output_dir`. When `load_best_model_at_end` is enabled, the 'best' checkpoint according to"
-                " `metric_for_best_model` will always be retained in addition to the most recent ones. For example,"
-                " for `save_total_limit=5` and `load_best_model_at_end=True`, the four last checkpoints will always be"
-                " retained alongside the best model. When `save_total_limit=1` and `load_best_model_at_end=True`,"
-                " it is possible that two checkpoints are saved: the last one and the best one (if they are different)."
-                " Default is unlimited checkpoints"
-            )
-        },
-    )
-    report_to: str = field(
-        default="wandb", metadata={"help": "The list of integrations to report the results and logs to."}
-    )
-    deepspeed: str = field(
-        default=None,
-        metadata={
-            "help": (
-                "Enable deepspeed and pass the path to deepspeed json config file (e.g. `ds_config.json`) or an already"
-                " loaded json file as a dict"
-            )
-        },
-    )
-    do_train: bool = field(default=True, metadata={"help": "Whether to run training."})
+class ExtraTrainingArguments:
+    model_max_length: int = 512
+    use_lora: bool = False
+    use_int8_training: bool = False
+    lora_config: Optional[str] = None
+    my_gradient_checkpointing: bool = False
+    device: str = "mps"
+
+# @dataclass
+# @add_start_docstrings(TrainingArguments.__doc__)
+# class TrainingArguments(TrainingArguments):
+#     model_max_length: int = field(
+#         default=512,
+#         metadata={"help": "Maximum sequence length."},
+#     )
+#     use_lora: bool = field(
+#         default=False,
+#         metadata={"help": "Whether to use LoRA."}
+#     )
+#     use_int8_training: bool = field(
+#         default=False, metadata={"help": "Whether to use int8 training."}
+#     )
+#     lora_config: Optional[str] = field(
+#         default=None,
+#         metadata={"help": "LoRA config file."},
+#     )
+#     ddp_find_unused_parameters: bool = field(
+#         default=False, metadata={"help": "ddp_find_unused_parameters"}
+#     )
+#     my_gradient_checkpointing: bool = field(
+#         default=False, metadata={"help": "my_gradient_checkpointing"}
+#     )
+#     # https://discuss.huggingface.co/t/wandb-does-not-display-train-eval-loss-except-for-last-one/9170
+#     evaluation_strategy: str = field(
+#         default="steps", metadata={"help": "The evaluation strategy to use."}
+#     )
+#     save_total_limit: Optional[int] = field(
+#         default=3,
+#         metadata={
+#             "help": (
+#                 "If a value is passed, will limit the total amount of checkpoints. Deletes the older checkpoints in"
+#                 " `output_dir`. When `load_best_model_at_end` is enabled, the 'best' checkpoint according to"
+#                 " `metric_for_best_model` will always be retained in addition to the most recent ones. For example,"
+#                 " for `save_total_limit=5` and `load_best_model_at_end=True`, the four last checkpoints will always be"
+#                 " retained alongside the best model. When `save_total_limit=1` and `load_best_model_at_end=True`,"
+#                 " it is possible that two checkpoints are saved: the last one and the best one (if they are different)."
+#                 " Default is unlimited checkpoints"
+#             )
+#         },
+#     )
+#     report_to: str = field(
+#         default="wandb", metadata={"help": "The list of integrations to report the results and logs to."}
+#     )
+#     deepspeed: str = field(
+#         default=None,
+#         metadata={
+#             "help": (
+#                 "Enable deepspeed and pass the path to deepspeed json config file (e.g. `ds_config.json`) or an already"
+#                 " loaded json file as a dict"
+#             )
+#         },
+#     )
+#     do_train: bool = field(default=True, metadata={"help": "Whether to run training."})
+
 
 
 def print_rank_0(msg, log_file, rank=0):
@@ -189,10 +199,9 @@ def print_rank_0(msg, log_file, rank=0):
 
 
 def main():
-    parser = HfArgumentParser(
-        (ModelArguments, DataArguments, TrainingArguments)
-    )
-    model_args, data_args, training_args = parser.parse_args_into_dataclasses()
+    parser = HfArgumentParser((ModelArguments, DataArguments, TrainingArguments, ExtraTrainingArguments))
+    model_args, data_args, training_args, extra_args = parser.parse_args_into_dataclasses()
+
 
     # world_size = int(os.environ.get("WORLD_SIZE", 1))
     # global_rank = torch.distributed.get_rank()
@@ -219,7 +228,7 @@ def main():
 
     # Log on each process the small summary:
     logger.warning(
-        f"Process rank: {training_args.local_rank}, device: {training_args.device}, n_gpu: {training_args.n_gpu}, distributed training: {bool(training_args.local_rank != -1)}, fp16-bits training: {training_args.fp16}, bf16-bits training: {training_args.bf16}"
+        f"Process rank: {training_args.local_rank}, device: {extra_args.device}, n_gpu: {training_args.n_gpu}, distributed training: {bool(training_args.local_rank != -1)}, fp16-bits training: {training_args.fp16}, bf16-bits training: {training_args.bf16}"
     )
     logger.info(f"Training/evaluation parameters {training_args}")
 
@@ -255,11 +264,10 @@ def main():
     # )
     torch_dtype = torch.float16 
 
-    device = "mps" if torch.backends.mps.is_available() else "cpu"
-    model.to(device)
+    device = extra_args.device # "mps" if torch.backends.mps.is_available() else "cpu"
     
     # int8 is not compatible with DeepSpeed (require not to pass device_map)
-    if training_args.use_int8_training:
+    if extra_args.use_int8_training:
         print_rank_0(
             "int8 is not compatible with DeepSpeed. ",
             log_file,
@@ -321,25 +329,25 @@ def main():
     )
 
     # peft model
-    if training_args.use_lora:
+    if extra_args.use_lora:
         print_rank_0(
-            "Loading lora config from {}".format(training_args.lora_config),
+            "Loading lora config from {}".format(extra_args.lora_config),
             log_file,
             global_rank,
         )
-        lora_config = json.load(open(training_args.lora_config))
+        lora_config = json.load(open(extra_args.lora_config))
         print_rank_0(
             "Lora config: {}".format(lora_config), 
             log_file, 
             global_rank
         )
-        if training_args.use_int8_training:
-            print_rank_0(
-                "training_args.use_int8_training!!! (int8 is not compatible with DeepSpeed)",
-                log_file,
-                global_rank,
-            )
-            model = prepare_model_for_int8_training(model)
+        # if extra_args.use_int8_training:
+        #     print_rank_0(
+        #         "extra_args.use_int8_training!!! (int8 is not compatible with DeepSpeed)",
+        #         log_file,
+        #         global_rank,
+        #     )
+        #     model = prepare_model_for_int8_training(model)
         config = LoraConfig(
             r=lora_config["lora_r"],
             lora_alpha=lora_config["lora_alpha"],
@@ -362,7 +370,7 @@ def main():
         model = get_peft_model(model, config)
         model.print_trainable_parameters()
 
-    if training_args.gradient_checkpointing:
+    if extra_args.my_gradient_checkpointing:
         model.gradient_checkpointing_enable()
 
     # model.is_parallelizable = True
@@ -372,7 +380,15 @@ def main():
         data_args.train_file
     )
 
-    with torch_distributed_zero_first(global_rank):        
+    # Only wrap for distributed training
+    if world_size > 1:
+        context = torch_distributed_zero_first(global_rank)
+    else:
+        # dummy context manager that does nothing
+        from contextlib import nullcontext
+        context = nullcontext()
+
+    with context:        
         train_data = load_dataset(
             "json",
             data_files=data_args.train_file,
@@ -388,7 +404,7 @@ def main():
         train_data = train_data["train"].shuffle().map(
             partial(
                 generate_and_tokenize_prompt,
-                training_args.model_max_length, 
+                extra_args.model_max_length, 
                 tokenizer
             )
         )
@@ -396,7 +412,7 @@ def main():
         val_data = val_data["train"].shuffle().map(
             partial(
                 generate_and_tokenize_prompt,
-                training_args.model_max_length,
+                extra_args.model_max_length,
                 tokenizer
             )
         )
