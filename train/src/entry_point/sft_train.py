@@ -20,7 +20,7 @@ import logging
 import json
 import sys
 
-sys.path.append('/home/daiyf/daiyf/PIXIU-train/pixiu_private-main/train')
+sys.path.append('/Users/himanshu/Documents/Projects/CALM-train-TrustworthyNLP/train')
 sys.path.append(
     os.path.abspath(os.path.join(os.path.dirname(__file__), os.path.pardir)))
 print(sys.path)
