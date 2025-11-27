@@ -1,1 +1,3 @@
 models
+train/hf_cache_dir_2
+train/src/__pycache__
