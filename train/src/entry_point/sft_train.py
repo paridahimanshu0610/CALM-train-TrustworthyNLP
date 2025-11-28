@@ -5,7 +5,7 @@ from transformers.trainer_pt_utils import torch_distributed_zero_first
 from transformers import (AutoModelForCausalLM, AutoTokenizer,
                           HfArgumentParser, LlamaTokenizer, TrainingArguments,
                           set_seed)
-from peft import LoraConfig, get_peft_model, prepare_model_for_int8_training
+from peft import LoraConfig, get_peft_model
 from datasets import load_dataset
 import transformers
 import torch
@@ -20,7 +20,7 @@ import logging
 import json
 import sys
 
-sys.path.append('/Users/himanshu/Documents/Projects/CALM-train-TrustworthyNLP/train')
+sys.path.append('/scratch/user/paridahimanshu0610/trustworthy_nlp/CALM-train-TrustworthyNLP/train')
 sys.path.append(
     os.path.abspath(os.path.join(os.path.dirname(__file__), os.path.pardir)))
 print(sys.path)
@@ -166,9 +166,9 @@ class TrainingArguments(TrainingArguments):
             )
         },
     )
-    report_to: str = field(
-        default="wandb", metadata={"help": "The list of integrations to report the results and logs to."}
-    )
+    # report_to: str = field(
+    #     default="wandb", metadata={"help": "The list of integrations to report the results and logs to."}
+    # )
     deepspeed: str = field(
         default=None,
         metadata={
@@ -252,28 +252,28 @@ def main():
         else getattr(torch, model_args.torch_dtype)
     )
     # int8 is not compatible with DeepSpeed (require not to pass device_map)
-    if training_args.use_int8_training:
-        print_rank_0(
-            "int8 is not compatible with DeepSpeed. ",
-            log_file,
-            global_rank
-        )
-        device_map = (
-            {"": int(os.environ.get("LOCAL_RANK") or 0)}
-            if world_size != 1 else "auto"
-        )
-        # device_map = "auto"
-        model = AutoModelForCausalLM.from_pretrained(
-            model_args.model_name_or_path,
-            load_in_8bit=True,  # xxx: int8 load in
-            device_map=device_map,  # xxx: int8 requires passing device_map
-            torch_dtype=torch_dtype,
-        )
-    else:
-        model = AutoModelForCausalLM.from_pretrained(
-            model_args.model_name_or_path,
-            torch_dtype=torch_dtype,
-        )
+    # if training_args.use_int8_training:
+    #     print_rank_0(
+    #         "int8 is not compatible with DeepSpeed. ",
+    #         log_file,
+    #         global_rank
+    #     )
+    #     device_map = (
+    #         {"": int(os.environ.get("LOCAL_RANK") or 0)}
+    #         if world_size != 1 else "auto"
+    #     )
+    #     # device_map = "auto"
+    #     model = AutoModelForCausalLM.from_pretrained(
+    #         model_args.model_name_or_path,
+    #         load_in_8bit=True,  # xxx: int8 load in
+    #         device_map=device_map,  # xxx: int8 requires passing device_map
+    #         torch_dtype=torch_dtype,
+    #     )
+    # else:
+    model = AutoModelForCausalLM.from_pretrained(
+        model_args.model_name_or_path,
+        torch_dtype=torch_dtype,
+    )
 
     if model_args.llama:
         tokenizer = LlamaTokenizer.from_pretrained(
@@ -323,13 +323,13 @@ def main():
             log_file, 
             global_rank
         )
-        if training_args.use_int8_training:
-            print_rank_0(
-                "training_args.use_int8_training!!! (int8 is not compatible with DeepSpeed)",
-                log_file,
-                global_rank,
-            )
-            model = prepare_model_for_int8_training(model)
+        # if training_args.use_int8_training:
+        #     print_rank_0(
+        #         "training_args.use_int8_training!!! (int8 is not compatible with DeepSpeed)",
+        #         log_file,
+        #         global_rank,
+        #     )
+        #     model = prepare_model_for_int8_training(model)
         config = LoraConfig(
             r=lora_config["lora_r"],
             lora_alpha=lora_config["lora_alpha"],
@@ -417,7 +417,7 @@ def main():
     t_total = math.ceil(training_nums / batch_size) * \
         training_args.num_train_epochs
     # eval steps
-    training_args.eval_steps = max(t_total // 5, 5)
+    training_args.eval_steps = max(t_total // 10, 10)
     # save steps
     training_args.save_steps = training_args.eval_steps
     training_args.warmup_steps = (
