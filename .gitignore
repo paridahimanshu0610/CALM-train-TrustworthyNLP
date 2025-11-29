@@ -3,3 +3,4 @@ train/hf_cache_dir_2
 train/src/__pycache__
 train/saved_models
 train/saved_models2
+data/original_data
