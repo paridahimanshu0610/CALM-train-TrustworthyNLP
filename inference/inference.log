@@ -1,0 +1,27 @@
+`torch_dtype` is deprecated! Use `dtype` instead!
+Loading checkpoint shards:   0%|          | 0/2 [00:00<?, ?it/s]Loading checkpoint shards:  50%|█████     | 1/2 [00:03<00:03,  3.32s/it]Loading checkpoint shards: 100%|██████████| 2/2 [00:04<00:00,  2.05s/it]Loading checkpoint shards: 100%|██████████| 2/2 [00:04<00:00,  2.24s/it]
+Load model successfully
+Human: 
+Xiaoming has 12 oranges. He wants to share them equally among his 4 friends. How many oranges does each person get? 
+
+Assistant:
+ no
+----------------------------------------------------------------------------------------------------
+Human: 
+Here is an elementary school math problem: Xiaoming has 3 pet cats and 2 pet dogs, while Xiaohua has 4 pet cats and 1 pet dog. Who has more pets?
+
+Assistant:
+ no
+----------------------------------------------------------------------------------------------------
+Human: 
+Problem: Xiaoming has 5 balls, he gives 2 balls to Xiaohong, how many balls does he have left?
+
+Assistant:
+ no
+----------------------------------------------------------------------------------------------------
+Human: 
+What is 2+3?
+
+Assistant:
+ yes
+----------------------------------------------------------------------------------------------------
