@@ -1,20 +1,21 @@
 import numpy as np
 import torch
-from transformers import LlamaTokenizer, AutoTokenizer, AutoModelForCausalLM, AutoConfig
+from transformers import LlamaTokenizer, AutoTokenizer, AutoModelForCausalLM, AutoConfig, BitsAndBytesConfig
 from peft import  PeftModel
 import argparse
 from tqdm import tqdm
 import json, os
-parser = argparse.ArgumentParser()
-parser.add_argument('--model_name_or_path', type=str, required=True)
-parser.add_argument('--ckpt_path', type=str, required=True)
-parser.add_argument('--use_lora', action="store_true")
-parser.add_argument('--llama', action="store_true")
-parser.add_argument('--mode', type=str, choices=['base', 'lora'], default='lora')
-args = parser.parse_args()
+
+# parser = argparse.ArgumentParser()
+# parser.add_argument('--model_name_or_path', type=str, required=True)
+# parser.add_argument('--ckpt_path', type=str, required=True)
+# parser.add_argument('--use_lora', action="store_true")
+# parser.add_argument('--llama', action="store_true")
+# parser.add_argument('--mode', type=str, choices=['base', 'lora'], default='lora')
+# args = parser.parse_args()
 
 
-max_new_tokens = 1024
+max_new_tokens = 4096
 generation_config = dict(
     temperature=0.001,
     top_k=30,
@@ -38,9 +39,19 @@ test_data_path = os.path.join(split_data_dir, 'Polish_bankruptcy_prediction', "t
 llm_output_path = os.path.join(project_dir, 'inference', 'models', 'CALM', 'Polish_bankruptcy_prediction', "Polish_bankruptcy_prediction.json")
 
 # ---------- Load JSON ----------
+instruction_list = []
 with open(test_data_path, "r", encoding="utf-8") as f:
-    instruction_list = json.load(f)
-    instruction_list = instruction_list[0:50]  # limit entries for testing
+    for line in f:
+        instruction_list.append(json.loads(line))
+instruction_list = instruction_list[25:32]  # limit entries for testing
+
+# ---------- Set args here for testing ----------
+args = {
+    'model_name_or_path': os.path.join(project_dir, 'models', 'Llama-2-7b-chat-hf'),  # replace with actual model path,
+    'ckpt_path': os.path.join(project_dir, 'train', 'saved_models', 'CRA-llama2-7b-chat_CRA_0.045M', 'checkpoint-2804'),  # replace with actual checkpoint path,
+    'llama': True,
+    'mode': 'lora'
+}
 
 
 # instruction_list = [
@@ -52,53 +63,107 @@ with open(test_data_path, "r", encoding="utf-8") as f:
 
 
 if __name__ == '__main__':
-    load_type = torch.float16 #Sometimes may need torch.float32
+    load_type = torch.float16  # Sometimes may need torch.float32
+    
+    # >>> CHANGED: Add Apple Silicon MPS support
     if torch.cuda.is_available():
-        device = torch.device(0)
+        device = torch.device("cuda")
+        print("Using CUDA GPU")
+    elif torch.backends.mps.is_available():
+        device = torch.device("mps")
+        print("Using Apple MPS GPU")
     else:
-        device = torch.device('cpu')
+        device = torch.device("cpu")
+        print("Using CPU")
 
-    if args.llama:
-        tokenizer = LlamaTokenizer.from_pretrained(args.model_name_or_path)
+    # >>> CHANGED: If on CPU or MPS, float16 can cause problems → switch to float32
+    if device.type in ["cpu", "mps"]:
+        load_type = torch.float16 # float16 can lead to incorrect outputs on MPS/CPU
+
+    # Load tokenizer
+    if args['llama']:
+        tokenizer = LlamaTokenizer.from_pretrained(args['model_name_or_path'])
     else:
-        tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path)
+        tokenizer = AutoTokenizer.from_pretrained(args['model_name_or_path'])
 
     tokenizer.pad_token_id = 0
     tokenizer.bos_token_id = 1
     tokenizer.eos_token_id = 2
     tokenizer.padding_side = "left"
-    model_config = AutoConfig.from_pretrained(args.model_name_or_path)
-    
-    # Uncomment this block if use_lora is needed
-    # if args.use_lora:
-    #     base_model = AutoModelForCausalLM.from_pretrained(args.model_name_or_path, torch_dtype=load_type)
-    #     model = PeftModel.from_pretrained(base_model, args.ckpt_path, torch_dtype=load_type)
-    # else:
-    #     model = AutoModelForCausalLM.from_pretrained(args.ckpt_path, torch_dtype=load_type, config=model_config)
+    model_config = AutoConfig.from_pretrained(args['model_name_or_path'])
 
-    # Use the parameter "mode" to decide whether ot use LoRA or base model
-    if args.mode == "base":
+
+    # Load model (base or LoRA)
+    if args['mode'] == "base":
         print("Loading base model...")
-        model = AutoModelForCausalLM.from_pretrained(args.model_name_or_path, torch_dtype=load_type, config=model_config)
-    elif args.mode == "lora":
+        # >>> CHANGED: Use load_type that adapts to MPS/CPU safely
+        # model = AutoModelForCausalLM.from_pretrained(
+        #     args['model_name_or_path'], 
+        #     torch_dtype=load_type,
+        #     config=model_config
+        # )
+        model = AutoModelForCausalLM.from_pretrained(
+            args['model_name_or_path'],
+            torch_dtype=load_type,
+            device_map="auto",
+            config=model_config 
+        )
+    elif args['mode'] == "lora":
         print("Loading LoRA model...")
-        base_model = AutoModelForCausalLM.from_pretrained(args.model_name_or_path, torch_dtype=load_type)
-        model = PeftModel.from_pretrained(base_model, args.ckpt_path, torch_dtype=load_type)
+        # base_model = AutoModelForCausalLM.from_pretrained(
+        #     args['model_name_or_path'],
+        #     torch_dtype=load_type
+        # )
+        # model = PeftModel.from_pretrained(
+        #     base_model, 
+        #     args['ckpt_path'],
+        #     torch_dtype=load_type
+        # )
+        # Load 4-bit model
+        base_model = AutoModelForCausalLM.from_pretrained(
+            args['model_name_or_path'],
+            torch_dtype=load_type,
+            device_map="auto"
+        )
+        # Load LoRA adapter on top of the 4-bit model
+        model = PeftModel.from_pretrained(
+            base_model,
+            args['ckpt_path'],
+            device_map="auto",
+            torch_dtype=load_type
+        )   
 
-    if device==torch.device('cpu'):
-        model.float()
+    ############### Should not be used with device_map="auto" #############
+    # >>> CHANGED: MPS cannot reliably handle float16 → convert to float32
+    # if device.type == "mps":
+    #     model = model.to(torch.float32)
+    # if device.type == "cpu":
+    #     model = model.float()
+    # model.to(device)
 
-    model.to(device)
     model.eval()
-    print("Load model successfully")
+    print("Loaded model successfully")
 
+    # >>> CHANGED: Ensure tokenizer tensors are moved to device properly
     for instruction in instruction_list:
-        inputs = tokenizer(instruction, max_length=max_new_tokens,truncation=True,return_tensors="pt")
+        # inputs = tokenizer(instruction["chat_query"], truncation=True,return_tensors="pt").to(model.device)
+        # print("Input shape without settting maximum token length: ", inputs["input_ids"].shape)
+        inputs = tokenizer(
+            instruction["chat_query"],
+            max_length=max_new_tokens,
+            truncation=True,
+            return_tensors="pt"
+        ).to(model.device)   # << CHANGED: Move entire batch to device safely
+        # print("Input shape with settting maximum token length: ", inputs["input_ids"].shape)
         generation_output = model.generate(
-            input_ids = inputs["input_ids"].to(device), 
+            input_ids=inputs["input_ids"],
             **generation_config
         )[0]
 
-        generate_text = tokenizer.decode(generation_output,skip_special_tokens=True)
+        generate_text = tokenizer.decode(
+            generation_output,
+            skip_special_tokens=True
+        )
         print(generate_text)
-        print("-"*100)
+        print("True output:", instruction['answer'])
+        print("-" * 100)
