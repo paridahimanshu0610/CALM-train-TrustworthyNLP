@@ -14,7 +14,7 @@ parser.add_argument('--mode', type=str, choices=['base', 'lora'], default='lora'
 args = parser.parse_args()
 
 
-max_new_tokens = 1024
+max_new_tokens = 4096
 generation_config = dict(
     temperature=0.001,
     top_k=30,
@@ -25,12 +25,32 @@ generation_config = dict(
     max_new_tokens=max_new_tokens
 )
 
-instruction_list = [
-    "Human: \nXiaoming has 12 oranges. He wants to share them equally among his 4 friends. How many oranges does each person get? \n\nAssistant:\n",
-    "Human: \nHere is an elementary school math problem: Xiaoming has 3 pet cats and 2 pet dogs, while Xiaohua has 4 pet cats and 1 pet dog. Who has more pets?\n\nAssistant:\n",
-    "Human: \nProblem: Xiaoming has 5 balls, he gives 2 balls to Xiaohong, how many balls does he have left?\n\nAssistant:\n",
-    "Human: \nWhat is 2+3?\n\nAssistant:\n"
-]
+
+# ---------- File paths ----------
+current_dir = os.path.dirname(__file__)
+project_dir = os.path.abspath(os.path.join(current_dir, "..", "..", "..")) 
+
+# Input test data path
+split_data_dir = os.path.join(project_dir, 'data', 'split_data')
+test_data_path = os.path.join(split_data_dir, 'Polish_bankruptcy_prediction', "test.jsonl")
+
+# Output LLM generation results path
+llm_output_path = os.path.join(project_dir, 'inference', 'models', 'CALM', 'Polish_bankruptcy_prediction', "Polish_bankruptcy_prediction.json")
+
+# ---------- Load JSON ----------
+instruction_list = []
+with open(test_data_path, "r", encoding="utf-8") as f:
+    for line in f:
+        instruction_list.append(json.loads(line))
+instruction_list = instruction_list[0:5]  # limit entries for testing
+
+
+# instruction_list = [
+#     "Human: \nXiaoming has 12 oranges. He wants to share them equally among his 4 friends. How many oranges does each person get? \n\nAssistant:\n",
+#     "Human: \nHere is an elementary school math problem: Xiaoming has 3 pet cats and 2 pet dogs, while Xiaohua has 4 pet cats and 1 pet dog. Who has more pets?\n\nAssistant:\n",
+#     "Human: \nProblem: Xiaoming has 5 balls, he gives 2 balls to Xiaohong, how many balls does he have left?\n\nAssistant:\n",
+#     "Human: \nWhat is 2+3?\n\nAssistant:\n"
+# ]
 
 
 if __name__ == '__main__':
@@ -75,7 +95,7 @@ if __name__ == '__main__':
     print("Load model successfully")
 
     for instruction in instruction_list:
-        inputs = tokenizer(instruction, max_length=max_new_tokens,truncation=True,return_tensors="pt")
+        inputs = tokenizer(instruction["chat_query"], max_length=max_new_tokens,truncation=True,return_tensors="pt")
         generation_output = model.generate(
             input_ids = inputs["input_ids"].to(device), 
             **generation_config
