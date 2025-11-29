@@ -10,6 +10,7 @@ parser.add_argument('--model_name_or_path', type=str, required=True)
 parser.add_argument('--ckpt_path', type=str, required=True)
 parser.add_argument('--use_lora', action="store_true")
 parser.add_argument('--llama', action="store_true")
+parser.add_argument('--mode', type=str, choices=['base', 'lora'], default='lora')
 args = parser.parse_args()
 
 
@@ -49,12 +50,22 @@ if __name__ == '__main__':
     tokenizer.eos_token_id = 2
     tokenizer.padding_side = "left"
     model_config = AutoConfig.from_pretrained(args.model_name_or_path)
+    
+    # Uncomment this block if use_lora is needed
+    # if args.use_lora:
+    #     base_model = AutoModelForCausalLM.from_pretrained(args.model_name_or_path, torch_dtype=load_type)
+    #     model = PeftModel.from_pretrained(base_model, args.ckpt_path, torch_dtype=load_type)
+    # else:
+    #     model = AutoModelForCausalLM.from_pretrained(args.ckpt_path, torch_dtype=load_type, config=model_config)
 
-    if args.use_lora:
+    # Use the parameter "mode" to decide whether ot use LoRA or base model
+    if args.mode == "base":
+        print("Loading base model...")
+        model = AutoModelForCausalLM.from_pretrained(args.model_name_or_path, torch_dtype=load_type, config=model_config)
+    elif args.mode == "lora":
+        print("Loading LoRA model...")
         base_model = AutoModelForCausalLM.from_pretrained(args.model_name_or_path, torch_dtype=load_type)
         model = PeftModel.from_pretrained(base_model, args.ckpt_path, torch_dtype=load_type)
-    else:
-        model = AutoModelForCausalLM.from_pretrained(args.ckpt_path, torch_dtype=load_type, config=model_config)
 
     if device==torch.device('cpu'):
         model.float()
