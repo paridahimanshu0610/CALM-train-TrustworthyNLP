@@ -32,7 +32,7 @@ export PYTHONPATH="$ABS_PATH/train"
 model_name_or_path="$ABS_PATH/models/Llama-2-7b-chat-hf"
 
 # LoRA checkpoint path
-ckpt_path="$ABS_PATH/train/saved_models/CRA-llama2-7b-chat_CRA_0.045M/checkpoint-2804"
+ckpt_path="$ABS_PATH/train/saved_models/CRA-llama2-7b-chat_CRA_0.045M/checkpoint-7010"
 
 # Output directory for inference logs
 inference_dir="$ABS_PATH/inference"
@@ -47,10 +47,12 @@ echo "LoRA Checkpoint: ${ckpt_path}"
 ###################################
 python /scratch/user/paridahimanshu0610/trustworthy_nlp/CALM-train-TrustworthyNLP/train/src/entry_point/inference.py \
     --model_name_or_path /scratch/user/paridahimanshu0610/trustworthy_nlp/CALM-train-TrustworthyNLP/models/Llama-2-7b-chat-hf \
-    --ckpt_path /scratch/user/paridahimanshu0610/trustworthy_nlp/CALM-train-TrustworthyNLP/train/saved_models/CRA-llama2-7b-chat_CRA_0.045M/checkpoint-2804 \
+    --ckpt_path /scratch/user/paridahimanshu0610/trustworthy_nlp/CALM-train-TrustworthyNLP/train/saved_models/CRA-llama2-7b-chat_CRA_0.045M/checkpoint-7010 \
     --use_lora \
-    --mode base \
+    --mode lora \
     --llama \
-    > ${inference_dir}/inference_base.log 2>&1
+    --model_name CALM \
+    --query_key chat_query \
+    > ${inference_dir}/inference.log 2>&1
 
 echo "Inference completed!"
