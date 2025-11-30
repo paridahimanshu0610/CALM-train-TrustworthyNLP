@@ -1,4 +1,3 @@
 Running inference...
 Base Model: /scratch/user/paridahimanshu0610/trustworthy_nlp/CALM-train-TrustworthyNLP/models/Llama-2-7b-chat-hf
-LoRA Checkpoint: /scratch/user/paridahimanshu0610/trustworthy_nlp/CALM-train-TrustworthyNLP/train/saved_models/CRA-llama2-7b-chat_CRA_0.045M/checkpoint-2804
-Inference completed!
+LoRA Checkpoint: /scratch/user/paridahimanshu0610/trustworthy_nlp/CALM-train-TrustworthyNLP/train/saved_models/CRA-llama2-7b-chat_CRA_0.045M/checkpoint-7010

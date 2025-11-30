@@ -3,6 +3,23 @@ train/hf_cache_dir_2
 train/src/__pycache__
 train/saved_models
 train/saved_models2
-data/original_data
-train/train.log
-data/split_data
+train/train.logx
+data/original_data/bankruptcy prediction/**/*.csv
+data/original_data/bankruptcy prediction/**/*.data
+data/original_data/bankruptcy prediction/**/*.dat
+data/original_data/bankruptcy prediction/**/*.arff
+data/original_data/credit_scoring/**/*.csv
+data/original_data/credit_scoring/**/*.data
+data/original_data/credit_scoring/**/*.dat
+data/original_data/credit_scoring/**/*.arff
+data/original_data/customs/**/*.csv
+data/original_data/customs/**/*.data
+data/original_data/customs/**/*.arff
+data/original_data/fraud detection/**/*.csv
+data/original_data/fraud detection/**/*.data
+data/original_data/fraud detection/**/*.dat
+data/original_data/fraud detection/**/*.arff
+data/original_data/insurance claim analysis/**/*.csv
+data/original_data/insurance claim analysis/**/*.data
+data/original_data/insurance claim analysis/**/*.dat
+data/original_data/insurance claim analysis/**/*.arff
