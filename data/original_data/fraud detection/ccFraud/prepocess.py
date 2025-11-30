@@ -58,7 +58,7 @@ def process_table(data, mean_list, add_debiasing_prompt=False):
         for i in range(len(data[0]) - 1):
             sp = ', ' if i != len(data[0]) - 2 else '.'
             if mean_list[i] == 'gender':
-                subtext = f'is a male' if str(data[j][i]) == 1 else f'is a female'
+                subtext = f'is a male' if str(data[j][i]) == '1' else f'is a female'
                 text = text + subtext + sp
             else:
                 text = text + f'the {mean_list_text[i]} is {str(data[j][i])}' + sp
