@@ -164,6 +164,54 @@ def save_bias_data(test_data, train_data, columns, directory='data'):
     ss2_data = pd.DataFrame(train_data, columns=columns)
     ss2_data.to_csv(os.path.join(directory, 'german_train.csv'), index=False, header=False)
 
+def sample_from_groups(df: pd.DataFrame, column, n: int, partition_value=None, gender_mapping=None) -> pd.DataFrame:
+    """
+    Group dataframe by column name, column index, or by partitioning a numeric column.
+    Returns original rows (no bucket column added).
+    """
+    df = df.copy()
+    if gender_mapping is not None:
+        temp_col = 'binary_gender'
+        df[temp_col] = df[column].map(gender_mapping)
+        column = temp_col
+
+    # Convert index → column name
+    if isinstance(column, int):
+        column = df.columns[column]
+
+    # If numeric partitioning is used
+    if partition_value is not None:
+        if not np.issubdtype(df[column].dtype, np.number):
+            raise ValueError("partition_value can only be used with numeric columns.")
+        
+        # Create grouping key WITHOUT modifying df
+        grouping_key = np.where(
+            df[column] <= partition_value,
+            f"<= {partition_value}",
+            f"> {partition_value}"
+        )
+        
+        return (
+            df.groupby(grouping_key)
+              .head(n)
+              .reset_index(drop=True)
+        )
+
+    # Normal groupby
+    df = df.groupby(column).head(n).reset_index(drop=True)
+
+    if gender_mapping is not None:
+        df.drop(columns=[temp_col], inplace=True)
+
+    return df
+
+def save_featurewise_bias_data(data, feature_index, n_samples_per_group, partition_value=None, directory='data', filename='featurewise_bias_data.csv', gender_mapping=None):
+    columns = [i for i in range(len(data[0]))]
+    df = pd.DataFrame(data, columns=columns)
+    sampled_df = sample_from_groups(df, column=feature_index, n=n_samples_per_group, partition_value=partition_value, gender_mapping=gender_mapping)
+    sampled_df.to_csv(os.path.join(directory, filename), index=False, header=False)
+    return sampled_df
+
 #####process
 data = pd.read_csv(os.path.join(current_dir, name), sep=' ', names=[i for i in range(feature_size)]).values.tolist()
 check = get_num(data)
@@ -178,6 +226,7 @@ dev_data = [data[i] for i in dev__ind]
 
 index_left = list(filter(lambda x: x not in train_ind + dev__ind, [i for i in range(len(data))]))
 test_data = [data[i] for i in index_left]
+test_data.extend(dev_data)
 
 target_dir = '/Users/himanshu/Documents/Projects/CALM-train-TrustworthyNLP/data/split_data/German_credit_scoring'
 os.makedirs(target_dir, exist_ok=True)
@@ -191,3 +240,28 @@ save_bias_data(test_data, train_data, columns, directory= os.path.join(target_di
 save_name = ['train', 'valid', 'test']
 for i, temp in enumerate([train_data, dev_data, test_data]):
     json_save(temp, save_name[i], directory=target_dir, add_debiasing_prompt=False)
+
+
+for i in range(len(mean_list)):
+    if mean_list[i] == 'Age in years':
+        age_idx = i
+    elif mean_list[i] == 'foreign worker':
+        foreign_status_idx = i
+    elif mean_list[i] == 'Personal status and sex':
+        gender_idx = i
+
+age_split_df = save_featurewise_bias_data(test_data, feature_index=age_idx, n_samples_per_group=50, partition_value=45, directory=os.path.join(target_dir, 'bias_data'), filename='german_age_split.csv')
+json_save(age_split_df.values.tolist(), 'german_age_bias', directory=target_dir, add_debiasing_prompt=False)
+
+foreign_split_df = save_featurewise_bias_data(test_data, feature_index=foreign_status_idx, n_samples_per_group=50, directory=os.path.join(target_dir, 'bias_data'), filename='german_foreign_split.csv')
+json_save(foreign_split_df.values.tolist(), 'german_foreign_bias', directory=target_dir, add_debiasing_prompt=False)
+
+gender_mapping = {
+    'A91': 0, # 'male: divorced or separated'
+    'A92': 1, # 'female: divorced or separated or married'
+    'A93': 0, # 'male and single'
+    'A94': 0, # 'male and married or widowed'
+    'A95': 1, # 'female and single'
+}
+gender_split_df = save_featurewise_bias_data(test_data, feature_index=gender_idx, n_samples_per_group=50, directory=os.path.join(target_dir, 'bias_data'), filename='german_gender_split.csv', gender_mapping=gender_mapping)
+json_save(gender_split_df.values.tolist(), 'german_gender_bias', directory=target_dir, add_debiasing_prompt=False)

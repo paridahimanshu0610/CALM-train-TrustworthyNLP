@@ -137,6 +137,49 @@ def save_bias_data(feature_size, test_data, train_data, directory='data'):
     tt_data = pd.DataFrame(train_data, columns=columns)
     tt_data.to_csv(os.path.join(directory, 'TraIn_train.csv'), index=False, header=False)
 
+def sample_from_groups(df: pd.DataFrame, column, n: int, partition_value=None) -> pd.DataFrame:
+    """
+    Group dataframe by column name, column index, or by partitioning a numeric column.
+    Returns original rows (no bucket column added).
+    """
+    
+    # Convert index → column name
+    if isinstance(column, int):
+        column = df.columns[column]
+
+    # If numeric partitioning is used
+    if partition_value is not None:
+        if not np.issubdtype(df[column].dtype, np.number):
+            raise ValueError("partition_value can only be used with numeric columns.")
+        
+        # Create grouping key WITHOUT modifying df
+        grouping_key = np.where(
+            df[column] <= partition_value,
+            f"<= {partition_value}",
+            f"> {partition_value}"
+        )
+        
+        return (
+            df.groupby(grouping_key)
+              .head(n)
+              .reset_index(drop=True)
+        )
+
+    # Normal groupby
+    return (
+        df.groupby(column)
+          .head(n)
+          .reset_index(drop=True)
+    )
+
+
+def save_featurewise_bias_data(data, feature_index, n_samples_per_group, partition_value=None, directory='data', filename='featurewise_bias_data.csv'):
+    columns = [i for i in range(len(data[0]))]
+    df = pd.DataFrame(data, columns=columns)
+    sampled_df = sample_from_groups(df, column=feature_index, n=n_samples_per_group, partition_value=partition_value)
+    sampled_df.to_csv(os.path.join(directory, filename), index=False, header=False)
+    return sampled_df
+
 
 #####process
 data = pd.read_csv(name, sep=',', header=0, names=[i for i in range(feature_size)])
@@ -169,3 +212,7 @@ save_bias_data(feature_size, test_data, train_data, directory=os.path.join(targe
 save_name = ['train', 'valid', 'test']
 for i, temp in enumerate([train_data, dev_data, test_data]):
     json_save(temp, save_name[i], directory=target_dir, add_debiasing_prompt=False)
+
+
+age_split_df = save_featurewise_bias_data(test_data, feature_index=-1, n_samples_per_group=50, partition_value=45, directory=os.path.join(target_dir, 'bias_data'), filename='travel_insurance_age_split.csv')
+json_save(age_split_df.values.tolist(), 'travel_insurance_age_bias', directory=target_dir, add_debiasing_prompt=False)

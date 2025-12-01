@@ -147,6 +147,51 @@ def save_gpt4_data(test_data, add_debiasing_prompt=False):
 
     # ss_data.to_csv('gpt4_ccfraud_test.csv', index=False)
     json_save_gpt4(ss_data.values.tolist(), 'test_gpt4', add_debiasing_prompt=add_debiasing_prompt)
+
+
+def sample_from_groups(df: pd.DataFrame, column, n: int, partition_value=None) -> pd.DataFrame:
+    """
+    Group dataframe by column name, column index, or by partitioning a numeric column.
+    Returns original rows (no bucket column added).
+    """
+    
+    # Convert index → column name
+    if isinstance(column, int):
+        column = df.columns[column]
+
+    # If numeric partitioning is used
+    if partition_value is not None:
+        if not np.issubdtype(df[column].dtype, np.number):
+            raise ValueError("partition_value can only be used with numeric columns.")
+        
+        # Create grouping key WITHOUT modifying df
+        grouping_key = np.where(
+            df[column] <= partition_value,
+            f"<= {partition_value}",
+            f"> {partition_value}"
+        )
+        
+        return (
+            df.groupby(grouping_key)
+              .head(n)
+              .reset_index(drop=True)
+        )
+
+    # Normal groupby
+    return (
+        df.groupby(column)
+          .head(n)
+          .reset_index(drop=True)
+    )
+
+
+def save_featurewise_bias_data(data, feature_index, n_samples_per_group, partition_value=None, directory='data', filename='featurewise_bias_data.csv'):
+    columns = [i for i in range(len(data[0]))]
+    df = pd.DataFrame(data, columns=columns)
+    sampled_df = sample_from_groups(df, column=feature_index, n=n_samples_per_group, partition_value=partition_value)
+    sampled_df.to_csv(os.path.join(directory, filename), index=False, header=False)
+    return sampled_df
+
 #####process
 
 # Original code commented out
@@ -172,3 +217,6 @@ target_dir = '/Users/himanshu/Documents/Projects/CALM-train-TrustworthyNLP/data/
 # Here, we take bias directly from the repository without splitting again
 test_data = pd.read_csv(os.path.join(target_dir, 'bias_data', 'ccFraud_test.csv'), sep=',', names=[i for i in range(feature_size)]).values.tolist()
 json_save(test_data, 'test', directory=target_dir, add_debiasing_prompt=False)
+
+gender_split_df = save_featurewise_bias_data(test_data, feature_index=0, n_samples_per_group=50, directory=os.path.join(target_dir, 'bias_data'), filename='ccFraud_gender_split.csv')
+json_save(gender_split_df.values.tolist(), 'ccFraud_gender_bias', directory=target_dir, add_debiasing_prompt=False)
