@@ -57,13 +57,17 @@ def process_table(data, mean_list, add_debiasing_prompt=False):
     for i in range(len(data[0]) - 1):  # data[0] (del Gender): 9 + 1 (5)
         st = "(categorical). \n" if type(data[0][i]) == str else "(numerical). \n"
         prompt = prompt + f'{mean_list[i][0]}: ' + mean_list[i][1] + ' ' + st
-    prompt = prompt + (
-        'For instance: \'The insurance company has attributes: Agency: CBH, '
-        'Agency Type: Travel Agency, Distribution Chanel: Offline, '
-        'Product Name: Comprehensive Plan, Duration: 186, Destination: MALAYSIA, '
-        'Net Sales: -29, Commision: 9.57, Age: 81.\', should be classified as '
-        '\'no\'.'
-    )
+    from_text1 = ('The insurance company has attributes: Agency: CBH, Agency Type: '
+                 'Travel Agency, Distribution Chanel: Offline, Product Name: Comprehensive '
+                 'Plan, Duration: 186, Destination: MALAYSIA, Net Sales: -29, Commision: 9.57, Age: 81.')  
+    from_text2 = ('The insurance company has attributes: Agency: C2B, Agency Type: Airlines, '
+                  'Distribution Channel: Online, Product Name: Bronze Plan, Duration: 18, '
+                  'Destination: SINGAPORE, Net Sales: 60.0, Commission: 15.0, Age: 36.') 
+    prompt = prompt + f"For instance, '{from_text1}' should be classified as 'no'."
+    example = {
+        "example1": {"input": from_text1, "output": "no"}, 
+        "example2": {"input": from_text2, "output": "yes"}
+    }
     # if add_debiasing_prompt:
     #     prompt += debias_prompt
     prompt += ' \nText: '
@@ -95,7 +99,8 @@ def process_table(data, mean_list, add_debiasing_prompt=False):
                 'answer': answer, 
                 "choices": ["yes", "no"],
                 "gold": gold, 
-                'text': text
+                'text': text,
+                'example': example
             }
         )
     return data_tmp
@@ -214,5 +219,5 @@ for i, temp in enumerate([train_data, dev_data, test_data]):
     json_save(temp, save_name[i], directory=target_dir, add_debiasing_prompt=False)
 
 
-age_split_df = save_featurewise_bias_data(test_data, feature_index=-1, n_samples_per_group=50, partition_value=45, directory=os.path.join(target_dir, 'bias_data'), filename='travel_insurance_age_split.csv')
+age_split_df = save_featurewise_bias_data(test_data, feature_index=-1, n_samples_per_group=2, partition_value=45, directory=os.path.join(target_dir, 'bias_data'), filename='travel_insurance_age_split.csv')
 json_save(age_split_df.values.tolist(), 'travel_insurance_age_bias', directory=target_dir, add_debiasing_prompt=False)

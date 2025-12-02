@@ -48,6 +48,17 @@ def process_table(data, mean_list, add_debiasing_prompt=False):
     prompt = "Detect the credit card fraud with the following financial profile. Respond with only \'good\' or \'bad\', and do not provide any additional information. "
     from_text = "The client is a female, the state number is 25, the number of cards is 1, the credit balance is 7000, the number of transactions is 16, the number of international transactions is 0, the credit limit is 6."
     prompt = prompt + f"For instance, '{from_text}' should be classified as 'good'."
+    example = {
+        "example1": {"input": from_text, "output": "good"},
+        "example2": {
+            "input": (
+                "The client is a male, the state number is 3, the number of cards is 4, "
+                "the credit balance is 150, the number of transactions is 320, "
+                "the number of international transactions is 45, the credit limit is 12."
+            ),
+            "output": "bad"
+        }
+    }
     
     # if add_debiasing_prompt:
     #     prompt += debias_prompt
@@ -79,7 +90,8 @@ def process_table(data, mean_list, add_debiasing_prompt=False):
                 'answer': answer, 
                 "choices": ["good", "bad"],
                 "gold": int(data[j][-1]), 
-                'text': text
+                'text': text,
+                'example': example
             }
         )
     return data_tmp
@@ -218,5 +230,5 @@ target_dir = '/Users/himanshu/Documents/Projects/CALM-train-TrustworthyNLP/data/
 test_data = pd.read_csv(os.path.join(target_dir, 'bias_data', 'ccFraud_test.csv'), sep=',', names=[i for i in range(feature_size)]).values.tolist()
 json_save(test_data, 'test', directory=target_dir, add_debiasing_prompt=False)
 
-gender_split_df = save_featurewise_bias_data(test_data, feature_index=0, n_samples_per_group=50, directory=os.path.join(target_dir, 'bias_data'), filename='ccFraud_gender_split.csv')
+gender_split_df = save_featurewise_bias_data(test_data, feature_index=0, n_samples_per_group=2, directory=os.path.join(target_dir, 'bias_data'), filename='ccFraud_gender_split.csv')
 json_save(gender_split_df.values.tolist(), 'ccFraud_gender_bias', directory=target_dir, add_debiasing_prompt=False)
