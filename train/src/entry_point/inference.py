@@ -36,10 +36,10 @@ project_dir = os.path.abspath(os.path.join(current_dir, "..", "..", ".."))
 
 # Input test data path
 split_data_dir = os.path.join(project_dir, 'data', 'split_data')
-test_data_path = os.path.join(split_data_dir, 'Polish_bankruptcy_prediction', "test.jsonl")
+test_data_path = os.path.join(split_data_dir, 'ccFraud_fraud_detection', "ccFraud_gender_bias.jsonl")
 
 # Output LLM generation results path
-llm_output_path = os.path.join(project_dir, 'inference', 'models', 'CALM', 'Polish_bankruptcy_prediction', "Polish_bankruptcy_prediction.json")
+llm_output_path = os.path.join(project_dir, 'inference', 'model_inference', 'CALM', 'ccFraud_fraud_detection', "ccFraud_zero_shot.json")
 
 # ---------- Load JSON ----------
 instruction_list = []
@@ -180,15 +180,15 @@ if __name__ == '__main__':
         texts = tokenizer.batch_decode(outputs, skip_special_tokens=True)
 
         # Process and store each response
-        temp = [transform_dict({**batch[i], "llm_response": t, "model_name": args.model_name}, query_key=args.query_key) for i, t in enumerate(texts)]
-        llm_response.extend(temp)
+        # temp = [transform_dict({**batch[i], "llm_response": t, "model_name": args.model_name}, query_key=args.query_key) for i, t in enumerate(texts)]
+        # llm_response.extend(temp)
 
         # Printing results for debugging
-        # for i, t in enumerate(texts):
-        #     print(t)
-        #     print("-"*100)
-        #     temp = transform_dict({**batch[i], "llm_response": t, "model_name": args.model_name}, query_key=args.query_key)
-        #     llm_response.append(temp)
+        for i, t in enumerate(texts):
+            print(t)
+            print("-"*100)
+            temp = transform_dict({**batch[i], "llm_response": t, "model_name": args.model_name}, query_key=args.query_key)
+            llm_response.append(temp)
         
     
     # Save LLM generation results to JSON
