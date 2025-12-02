@@ -1,6 +1,5 @@
 {
     "TheFinAI/Fin-o1-8B": {
-        "max_new_tokens": 3,
         "query_key": "normal_query",
         "auxiliary_prompt": "",
         "generation_config": {
@@ -12,12 +11,11 @@
             "repetition_penalty": 1.2,
             "max_new_tokens": 3
         },
-        "remove_answer_string": true
+        "remove_answer_string": false
     },
     "TheFinAI/finma-7b-full": {
-        "max_new_tokens": 3,
         "query_key": "normal_query",
-        "auxiliary_prompt": "",
+        "auxiliary_prompt": "DO NOT PROVIDE ANY EXPLANATION.",
         "generation_config": {
             "temperature": 0.001,
             "top_k": 30,
@@ -30,9 +28,8 @@
         "remove_answer_string": true
     },
     "hirundo-io/DeepSeek-R1-Distill-Llama-8B-Debiased": {
-        "max_new_tokens": 3,
         "query_key": "normal_query",
-        "auxiliary_prompt": "",
+        "auxiliary_prompt": "DO NOT PROVIDE ANY EXPLANATION.",
         "generation_config": {
             "temperature": 0.001,
             "top_k": 30,
@@ -45,9 +42,8 @@
         "remove_answer_string": true
     },
     "deepseek-ai/DeepSeek-R1-Distill-Llama-8B": {
-        "max_new_tokens": 3,
         "query_key": "normal_query",
-        "auxiliary_prompt": "",
+        "auxiliary_prompt": "DO NOT PROVIDE ANY EXPLANATION.",
         "generation_config": {
             "temperature": 0.001,
             "top_k": 30,
