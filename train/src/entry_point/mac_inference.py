@@ -36,17 +36,17 @@ project_dir = os.path.abspath(os.path.join(current_dir, "..", "..", ".."))
 
 # Input test data path
 split_data_dir = os.path.join(project_dir, 'data', 'split_data')
-test_data_path = os.path.join(split_data_dir, 'Polish_bankruptcy_prediction', "test.jsonl")
+test_data_path = os.path.join(split_data_dir, 'ccFraud_fraud_detection', "ccFraud_gender_bias.jsonl")
 
 # Output LLM generation results path
-llm_output_path = os.path.join(project_dir, 'inference', 'models', 'CALM', 'Polish_bankruptcy_prediction', "Polish_bankruptcy_prediction.json")
+llm_output_path = os.path.join(project_dir, 'inference', 'model_inference', 'CALM', 'ccFraud_fraud_detection', "ccFraud_zero_shot.json")
 
 # ---------- Load JSON ----------
 instruction_list = []
 with open(test_data_path, "r", encoding="utf-8") as f:
     for line in f:
         instruction_list.append(json.loads(line))
-instruction_list = instruction_list[31:35]  # limit entries for testing
+# instruction_list = instruction_list[31:35]  # limit entries for testing
 
 # ---------- Set args here for testing ----------
 args = {
@@ -119,6 +119,67 @@ def transform_dict(data: dict, query_key = "chat_query") -> dict:
     }
 
     return transformed 
+
+def run_inference(
+    input_prompt,
+    model,
+    generation_config,
+    tokenizer,
+    two_interactions=False,
+    second_query=None,
+):
+    """
+    Runs inference for one or two Human–Assistant interactions.
+
+    Parameters
+    ----------
+    input_prompt : str
+        The initial prompt starting with "Human:" and ending with "Assistant:".
+    model : PreTrainedModel
+        Loaded HF model.
+    generation_config : dict
+        Generation parameters.
+    tokenizer : PreTrainedTokenizer
+        Tokenizer for the model.
+    two_interactions : bool, optional
+        Whether to perform a second interaction (default: False).
+    second_query : str, optional
+        User query for the second interaction if `two_interactions=True`.
+
+    Returns
+    -------
+    str
+        The assistant's response from the last interaction.
+    """
+
+    def _generate(prompt):
+        """Internal helper for running one inference."""
+        inputs = tokenizer(prompt, truncation=True, return_tensors="pt").to(model.device)
+        output_ids = model.generate(input_ids=inputs["input_ids"], **generation_config)[0]
+        output_text = tokenizer.decode(output_ids, skip_special_tokens=True)
+        return output_text
+
+    # ---- First Interaction ----
+    first_output = _generate(input_prompt)
+
+    if not two_interactions:
+        # Return the assistant part extracted
+        return first_output
+
+    # ---- If two_interactions=True ----
+    if two_interactions and second_query is None:
+        raise ValueError(
+            "two_interactions=True requires second_query to be provided."
+        )
+
+    # Append the first assistant output and start second Human query
+    second_prompt = (
+        f"{first_output}\nHuman: {second_query}\nAssistant:"
+    )
+
+    second_output = _generate(second_prompt)
+
+    return second_output
 
 if __name__ == '__main__':
     load_type = torch.float16  # Sometimes may need torch.float32
@@ -203,55 +264,65 @@ if __name__ == '__main__':
     print("Loaded model successfully")
 
     # >>> CHANGED: Ensure tokenizer tensors are moved to device properly
-    # for instruction in instruction_list:
-    #     # inputs = tokenizer(instruction["chat_query"], truncation=True,return_tensors="pt").to(model.device)
-    #     # print("Input shape without settting maximum token length: ", inputs["input_ids"].shape)
-    #     inputs = tokenizer(
-    #         instruction["chat_query"],
-    #         max_length=max_new_tokens,
-    #         truncation=True,
-    #         return_tensors="pt"
-    #     ).to(model.device)   # << CHANGED: Move entire batch to device safely
-    #     # print("Input shape with settting maximum token length: ", inputs["input_ids"].shape)
-    #     generation_output = model.generate(
-    #         input_ids=inputs["input_ids"],
-    #         **generation_config
-    #     )[0]
+    llm_response = []
+    for instruction in instruction_list:
+        # inputs = tokenizer(
+        #     instruction["chat_query"],
+        #     max_length=max_new_tokens,
+        #     truncation=True,
+        #     return_tensors="pt"
+        # ).to(model.device)   
 
-    #     generate_text = tokenizer.decode(
-    #         generation_output,
-    #         skip_special_tokens=True
-    #     )
-    #     print(generate_text)
-    #     print("True output:", instruction['answer'])
-    #     print("-" * 100)
+        # generation_output = model.generate(
+        #     input_ids=inputs["input_ids"],
+        #     **generation_config
+        # )[0]
+
+        # generate_text = tokenizer.decode(
+        #     generation_output,
+        #     skip_special_tokens=True
+        # )
+
+        generate_text = run_inference(
+            input_prompt=instruction["chat_query"],
+            model=model,
+            generation_config=generation_config,
+            tokenizer=tokenizer,
+            two_interactions=False
+        )
+        print(generate_text)
+        print("True output:", instruction['answer'])
+        print("-" * 100)
+        temp = transform_dict({**instruction, "llm_response": generate_text, "model_name": args['model_name']}, query_key=args['query_key'])
+        llm_response.append(temp)
+
 
     # Process in batches for efficiency
-    batch_size = 2   # tune this depending on your GPU memory
-    llm_response = []
-    for i in range(0, len(instruction_list), batch_size):
-        batch = instruction_list[i:i+batch_size]
-        prompts = [item[args['query_key']] for item in batch]
+    # batch_size = 2   # tune this depending on your GPU memory
+    # llm_response = []
+    # for i in range(0, len(instruction_list), batch_size):
+    #     batch = instruction_list[i:i+batch_size]
+    #     prompts = [item[args['query_key']] for item in batch]
 
-        inputs = tokenizer(prompts, max_length=max_new_tokens, padding=True, truncation=True, return_tensors="pt").to(model.device)
+    #     inputs = tokenizer(prompts, max_length=max_new_tokens, padding=True, truncation=True, return_tensors="pt").to(model.device)
 
-        outputs = model.generate(
-            **inputs,
-            **generation_config
-        )
+    #     outputs = model.generate(
+    #         **inputs,
+    #         **generation_config
+    #     )
 
-        texts = tokenizer.batch_decode(outputs, skip_special_tokens=True)
+    #     texts = tokenizer.batch_decode(outputs, skip_special_tokens=True)
 
-        # Process and store each response
-        # temp = [transform_dict({**batch[i], "llm_response": t, "model_name": args['model_name']}, query_key=args['query_key']) for i, t in enumerate(texts)]
-        # llm_response.extend(temp)
+    #     # Process and store each response
+    #     # temp = [transform_dict({**batch[i], "llm_response": t, "model_name": args['model_name']}, query_key=args['query_key']) for i, t in enumerate(texts)]
+    #     # llm_response.extend(temp)
 
-        # Printing results for debugging
-        for i, t in enumerate(texts):
-            print(t)
-            print("-"*100)
-            temp = transform_dict({**batch[i], "llm_response": t, "model_name": args['model_name']}, query_key=args['query_key'])
-            llm_response.append(temp)
+    #     # Printing results for debugging
+    #     for i, t in enumerate(texts):
+    #         print(t)
+    #         print("-"*100)
+    #         temp = transform_dict({**batch[i], "llm_response": t, "model_name": args['model_name']}, query_key=args['query_key'])
+    #         llm_response.append(temp)
         
     
     # Save LLM generation results to JSON
