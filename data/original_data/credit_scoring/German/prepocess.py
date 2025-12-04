@@ -96,11 +96,11 @@ def process(data, mean_list, dict, add_debiasing_prompt=False):
              f"Respond with only either 'good' or 'bad'. For instance, '{from_text}' should be classified as 'good'."
     example = {
         "example1" :{
-            "input": "The client has an unstable employment history, very low savings, and multiple existing debts.",
+            "input": "The client has a very low checking balance, past credit issues, minimal savings, unstable employment, a high repayment burden, an unskilled job, no guarantor support, and multiple existing debts.",
             "output": "bad"
         },
         "example2":{
-            "input": "The client has a strong repayment history, a professional occupation, low installment burden, and supportive co-applicant backing.",
+            "input": "The client has a strong repayment history, a stable and long-term employment record, substantial savings, a healthy checking balance, a low repayment burden, a skilled professional job, reliable guarantor support, and only minimal existing debts.",
             "output": "good"
         }
     }
