@@ -13,9 +13,9 @@
         },
         "remove_answer_string": false
     },
-    "TheFinAI/finma-7b-full": {
+    "ChanceFocus/finma-7b-full": {
         "query_key": "normal_query",
-        "auxiliary_prompt": "DO NOT PROVIDE ANY EXPLANATION.",
+        "auxiliary_prompt": "",
         "generation_config": {
             "temperature": 0.001,
             "top_k": 30,
@@ -25,11 +25,11 @@
             "repetition_penalty": 1.2,
             "max_new_tokens": 3
         },
-        "remove_answer_string": true
+        "remove_answer_string": false
     },
     "hirundo-io/DeepSeek-R1-Distill-Llama-8B-Debiased": {
         "query_key": "normal_query",
-        "auxiliary_prompt": "DO NOT PROVIDE ANY EXPLANATION.",
+        "auxiliary_prompt": "",
         "generation_config": {
             "temperature": 0.001,
             "top_k": 30,
@@ -39,11 +39,11 @@
             "repetition_penalty": 1.2,
             "max_new_tokens": 3
         },
-        "remove_answer_string": true
+        "remove_answer_string": false
     },
     "deepseek-ai/DeepSeek-R1-Distill-Llama-8B": {
         "query_key": "normal_query",
-        "auxiliary_prompt": "DO NOT PROVIDE ANY EXPLANATION.",
+        "auxiliary_prompt": "",
         "generation_config": {
             "temperature": 0.001,
             "top_k": 30,
@@ -53,6 +53,6 @@
             "repetition_penalty": 1.2,
             "max_new_tokens": 3
         },
-        "remove_answer_string": true
+        "remove_answer_string": false
     }
 }
