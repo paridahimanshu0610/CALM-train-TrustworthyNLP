@@ -82,10 +82,13 @@ def run_qwen_inference(model, tokenizer, user_text, generation_config, choices=[
     ).to(model.device)
 
     # Generate
+    attention_mask = (encoded != tokenizer.pad_token_id).long()
     with torch.no_grad():
         output_ids = model.generate(
             input_ids=encoded,
-            **generation_config
+            attention_mask = attention_mask,
+            **generation_config,
+            pad_token_id=tokenizer.pad_token_id
         )
 
     # Decode
@@ -104,6 +107,182 @@ def run_qwen_inference(model, tokenizer, user_text, generation_config, choices=[
         return choices[1]
 
     # Fallback (should never happen)
+    return clean
+
+def format_input_for_distill(instruction: dict, query_key="normal_query",
+                             add_strict_prompt=True, auxiliary_prompt="",
+                             remove_answer_string=True) -> str:
+    """
+    Formats input prompt for DeepSeek-R1-Distill-Llama models.
+    Uses simple Input/Output example formatting + strict final answer line.
+    """
+
+    example1 = instruction["example"].get("example1", {})
+    example2 = instruction["example"].get("example2", {})
+
+    prompt = (
+        "Example:\n"
+        "Input: " + example1.get("input", "") + "\n"
+        "Output: " + example1.get("output", "") + "\n\n"
+        "Example:\n"
+        "Input: " + example2.get("input", "") + "\n"
+        "Output: " + example2.get("output", "") + "\n\n"
+        "Now classify the following profile:\n\n"
+        "Input: '" + instruction.get("text", "") + "'\n"
+        "Final Answer:"
+    )
+
+    if remove_answer_string:
+        prompt = re.sub(r'Answer:\s*$', '', prompt).strip()
+
+    if auxiliary_prompt:
+        prompt += " " + auxiliary_prompt
+
+    if add_strict_prompt:
+        choices = [f"'{c}'" for c in instruction.get("choices", [])]
+        prompt += f" FINAL ANSWER MUST BE EXACTLY ONE WORD FROM {' OR '.join(choices)}:"
+
+    return prompt
+
+def run_distill_inference(model, tokenizer, user_text, generation_config, choices=["good", "bad"]):
+    """
+    Performs strict classification using DeepSeek-R1-Distill-Llama models.
+    Suppresses chain-of-thought and <think> tags.
+    Returns exactly one of the provided choices.
+    """
+
+    # System instructions for DeepSeek
+    choices_str = " or ".join([f"'{c}'" for c in choices])
+    system_prompt = (
+        "You are a strict classifier. "
+        f"You must respond with EXACTLY one word: {choices_str}. "
+        "Do NOT output chain-of-thought. "
+        "Do NOT output <think> tags. "
+        "Do NOT output any analysis. "
+        f"Only output {choices_str}."
+    )
+
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user",  "content": user_text}
+    ]
+
+    # Apply DeepSeek chat template
+    encoded = tokenizer.apply_chat_template(
+        messages,
+        return_tensors="pt",
+        truncation=True,
+        add_generation_prompt=True
+    ).to(model.device)
+
+    # Generate
+    attention_mask = (encoded != tokenizer.pad_token_id).long()
+    with torch.no_grad():
+        output_ids = model.generate(
+            input_ids=encoded,
+            attention_mask = attention_mask,
+            **generation_config,
+            pad_token_id=tokenizer.pad_token_id
+        )
+
+    # Decode
+    raw = tokenizer.decode(output_ids[0], skip_special_tokens=True)
+
+    # Remove reasoning leakage & unwanted artifacts
+    for bad in ["assistant", "<think>", "</think>", "## Thinking", "```", "<|im_end|>"]:
+        raw = raw.replace(bad, "")
+
+    clean = raw.strip().lower()
+
+    # Return only the allowed choices
+    for c in choices:
+        if c.lower() in clean:
+            return c
+
+    # Fallback (rare)
+    return clean
+
+
+def format_input_for_finma(
+    instruction: dict,
+    query_key="normal_query",
+    add_strict_prompt=True,
+    auxiliary_prompt="",
+    remove_answer_string=True
+) -> str:
+    """Formats prompt for FinMA (LLaMA-style), similar to Distill and Qwen versions."""
+
+    example1 = instruction["example"].get("example1", {})
+    example2 = instruction["example"].get("example2", {})
+
+    prompt = (
+        "Example:\n"
+        "Input: " + example1.get("input", "") + "\n"
+        "Output: " + example1.get("output", "") + "\n\n"
+        "Example:\n"
+        "Input: " + example2.get("input", "") + "\n"
+        "Output: " + example2.get("output", "") + "\n\n"
+        "Now classify the following profile:\n\n"
+        "Input: '" + instruction.get("text", "") + "'\n"
+        "Final Answer:"
+    )
+
+    if remove_answer_string:
+        prompt = re.sub(r'Answer:\s*$', '', prompt).strip()
+
+    if auxiliary_prompt:
+        prompt += " " + auxiliary_prompt
+
+    if add_strict_prompt:
+        choices = [f"'{c}'" for c in instruction.get("choices", [])]
+        prompt += f" FINAL ANSWER MUST BE EXACTLY ONE WORD FROM {' OR '.join(choices)}:"
+
+    return prompt
+
+
+def run_finma_inference(
+    model,
+    tokenizer,
+    user_text: str,
+    generation_config,
+    choices=["good", "bad"]
+):
+    """
+    Performs strict classification on TheFinAI/finma-7b-full.
+    Forces a short, deterministic output and removes any reasoning.
+    """
+
+    # Encode raw prompt (FinMA is not chat-based)
+    encoded = tokenizer(
+        user_text,
+        return_tensors="pt",
+        truncation=True
+    ).to(model.device)
+
+    with torch.no_grad():
+        output_ids = model.generate(
+            input_ids=encoded.input_ids,
+            attention_mask=encoded.attention_mask,
+            **generation_config
+        )
+
+    raw = tokenizer.decode(output_ids[0], skip_special_tokens=True).lower()
+
+    # Remove garbage tokens
+    for bad in [
+        "<think>", "</think>", "assistant", "user",
+        "## thinking", "```", "<|im_end|>"
+    ]:
+        raw = raw.replace(bad, "")
+
+    clean = raw.strip()
+
+    # Return first matching choice
+    for c in choices:
+        if c.lower() in clean:
+            return c.lower()
+
+    # Fallback
     return clean
 
 def format_input(instruction: dict, query_key = "normal_query", add_strict_prompt = True, auxiliary_prompt = "", remove_answer_string = True) -> str:
@@ -193,7 +372,7 @@ if __name__ == "__main__":
     # ---------------------------
     # Load Model Config
     # ---------------------------
-    model_name = "TheFinAI/Fin-o1-8B"
+    model_name = "ChanceFocus/finma-7b-full"
     config_path = os.path.join(current_dir, "model_inference_config.json")
 
     model_cfg = load_config(model_name, config_path)
@@ -267,13 +446,46 @@ if __name__ == "__main__":
 
         if model_name == "TheFinAI/Fin-o1-8B":
             full_prompt = format_input_for_qwen(instruction, query_key=query_key, add_strict_prompt=False, auxiliary_prompt=auxiliary_prompt, remove_answer_string=remove_answer_string)
-            print("Full Prompt:\n", full_prompt)
+            print("Fin-o1-8B Full Prompt:\n", full_prompt)
             generation_output = run_qwen_inference(model, tokenizer, full_prompt, generation_config, choices=instruction.get("choices", ["yes", "no"]))
+        elif model_name == "deepseek-ai/DeepSeek-R1-Distill-Llama-8B" or model_name == "hirundo-io/DeepSeek-R1-Distill-Llama-8B-Debiased":
+            full_prompt = format_input_for_distill(
+                instruction,
+                query_key=query_key,
+                add_strict_prompt=False,
+                auxiliary_prompt=auxiliary_prompt,
+                remove_answer_string=remove_answer_string
+            )
+            print("Deepseek Full Prompt:\n", full_prompt)
+            generation_output = run_distill_inference(
+                model,
+                tokenizer,
+                full_prompt,
+                generation_config,
+                choices=instruction.get("choices", ["good", "bad"])
+            )
+        elif model_name == "ChanceFocus/finma-7b-full":
+            full_prompt = format_input_for_finma(
+                instruction,
+                query_key=query_key,
+                add_strict_prompt=False,
+                auxiliary_prompt=auxiliary_prompt,
+                remove_answer_string=remove_answer_string
+            )
+            print("FinMA Full Prompt:\n", full_prompt)
+            generation_output = run_finma_inference(
+                model,
+                tokenizer,
+                full_prompt,
+                generation_config,
+                choices=instruction.get("choices", ["good", "bad"])
+            )
         else:
             full_prompt = format_input(instruction, query_key=query_key, add_strict_prompt=False, auxiliary_prompt=auxiliary_prompt, remove_answer_string=remove_answer_string)
+            print("Full Prompt:\n", full_prompt)
             generation_output = run_model_inference(model, tokenizer, full_prompt, generation_config)
 
-        print(generation_output)
+        print("Model Output:", generation_output)
         print("True output:", instruction["answer"])
         print("-" * 100)
 
