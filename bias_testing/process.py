@@ -68,15 +68,12 @@ def predo(data):
 
 def predo_tra(data):
     # Identify object columns
-    object_cols = data.columns[data.dtypes == 'object']
-
-    # Work on a copy
+    s = (data.dtypes == 'object')
+    object_cols = list(s[s].index)
     pre_data = data.copy()
-
-    # Encode object columns safely
+    label_encoder = LabelEncoder()
     for col in object_cols:
-        le = LabelEncoder()
-        pre_data.loc[:, col] = le.fit_transform(pre_data[col].astype(str))
+        pre_data[col] = label_encoder.fit_transform(data[col])
 
     # Age column is index 9 → binarize based on 45
     # Avoid chained assignment by using .loc
@@ -98,16 +95,16 @@ def preres(data, path):
             else: res_data[i][-1] = 2
     return res_data
 
-def preres_tra(data, path):
+def preres_tra(data, path, target_index = 4):
     res_data = data
     with open(path, 'r', encoding='utf-8') as file:
         file_json = json.load(file)
         for i, text in enumerate(file_json):
             if text['truth']=='no' and text['acc']=='1.0':
-                res_data[i][0] = 0
+                res_data[i][target_index] = 0
             elif text['truth']=='yes' and text['acc']=='0.0':
-                res_data[i][0] = 0
-            else: res_data[i][0] = 1
+                res_data[i][target_index] = 0
+            else: res_data[i][target_index] = 1
     return res_data
 
 def preres_cc(data, path):
