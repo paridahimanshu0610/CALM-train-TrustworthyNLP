@@ -57,7 +57,7 @@ def bias_test(output_df, input_test_df):
     return final_res
 
 model_name = "CALM"
-prompt_file_suffix = "_zero_shot" # "_zero_shot"
+prompt_file_suffix = "_zero_shot" # "_zero_shot" | "_cf"
 
 train_filename = os.path.join(project_dir, "data", "split_data", "Travel_Insurance", "bias_data", "TraIn_train.csv")
 all_test_filename = os.path.join(project_dir, "data", "split_data", "Travel_Insurance", "bias_data", "TraIn_test.csv")

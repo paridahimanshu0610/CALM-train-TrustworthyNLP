@@ -90,7 +90,7 @@ def bias_test(output_df, input_test_df, bias_attributes = ['Personal status and 
 
 model_name = "CALM"
 current_target_feature = "foreign" # {"gender", "age", "foreign"}
-prompt_file_suffix = "_zero_shot" # "_zero_shot"
+prompt_file_suffix = "_cf" # "_zero_shot" | "_cf"
 
 train_filename = os.path.join(project_dir, "data", "split_data", "German_credit_scoring", "bias_data", "german_train.csv")
 all_test_filename = os.path.join(project_dir, "data", "split_data", "German_credit_scoring", "bias_data", "german_test.csv")

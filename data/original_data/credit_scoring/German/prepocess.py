@@ -139,14 +139,15 @@ def process(data, mean_list, dict, add_debiasing_prompt=False, add_counter_factu
                 'text': text,
                 'example': example,
                 'task': 'creditworthiness',
-                'debias_prompt': debias_prompt
+                'debias_prompt': debias_prompt,
+                'counter_factual_prompt': counter_factual_prompt
             }
         )
     return data_tmp
 
 
-def json_save(data, dataname, mean_list=mean_list, dict=dict, out_jsonl=True, directory='data', add_debiasing_prompt=False):
-    data_tmp = process(data, mean_list, dict, add_debiasing_prompt=add_debiasing_prompt)
+def json_save(data, dataname, mean_list=mean_list, dict=dict, out_jsonl=True, directory='data', add_debiasing_prompt=False, add_counter_factual_prompt=False):
+    data_tmp = process(data, mean_list, dict, add_debiasing_prompt=add_debiasing_prompt, add_counter_factual_prompt=add_counter_factual_prompt)
 
     if out_jsonl:
         print(f"Saving {dataname} data to JSONL format...")
@@ -252,10 +253,16 @@ columns = [i for i in range(feature_size)]
 os.makedirs(os.path.join(target_dir, 'bias_data'), exist_ok=True)
 save_bias_data(test_data, train_data, columns, directory= os.path.join(target_dir, 'bias_data'))
 
+
+bias_prompt_file_extension = "" # "_with_dbprompt" | "_with_cfprompt"
+bias_prompt_to_add = False
+counter_factual_prompt_to_add = False
+total_per_group_samples = 50
+
 # Saving jsonl/parquet files for model inference
 save_name = ['train', 'valid', 'test']
 for i, temp in enumerate([train_data, dev_data, test_data]):
-    json_save(temp, save_name[i], directory=target_dir, add_debiasing_prompt=False)
+    json_save(temp, save_name[i], directory=target_dir, add_debiasing_prompt=False, add_counter_factual_prompt=counter_factual_prompt_to_add)
 
 
 for i in range(len(mean_list)):
@@ -266,15 +273,12 @@ for i in range(len(mean_list)):
     elif mean_list[i] == 'Personal status and sex':
         gender_idx = i
 
-bias_prompt_file_extension = "" # "_with_dbprompt"
-bias_prompt_to_add = False
-total_per_group_samples = 50
 
 age_split_df = save_featurewise_bias_data(test_data, feature_index=age_idx, n_samples_per_group=total_per_group_samples, partition_value=45, directory=os.path.join(target_dir, 'bias_data'), filename='german_age_split.csv')
-json_save(age_split_df.values.tolist(), 'german_age_bias' + bias_prompt_file_extension, directory=target_dir, add_debiasing_prompt=bias_prompt_to_add)
+json_save(age_split_df.values.tolist(), 'german_age_bias' + bias_prompt_file_extension, directory=target_dir, add_debiasing_prompt=bias_prompt_to_add, add_counter_factual_prompt=counter_factual_prompt_to_add)
 
 foreign_split_df = save_featurewise_bias_data(test_data, feature_index=foreign_status_idx, n_samples_per_group=total_per_group_samples, directory=os.path.join(target_dir, 'bias_data'), filename='german_foreign_split.csv')
-json_save(foreign_split_df.values.tolist(), 'german_foreign_bias' + bias_prompt_file_extension, directory=target_dir, add_debiasing_prompt=bias_prompt_to_add)
+json_save(foreign_split_df.values.tolist(), 'german_foreign_bias' + bias_prompt_file_extension, directory=target_dir, add_debiasing_prompt=bias_prompt_to_add, add_counter_factual_prompt=counter_factual_prompt_to_add)
 
 gender_mapping = {
     'A91': 0, # 'male: divorced or separated'
@@ -284,4 +288,4 @@ gender_mapping = {
     'A95': 1, # 'female and single'
 }
 gender_split_df = save_featurewise_bias_data(test_data, feature_index=gender_idx, n_samples_per_group=total_per_group_samples, directory=os.path.join(target_dir, 'bias_data'), filename='german_gender_split.csv', gender_mapping=gender_mapping)
-json_save(gender_split_df.values.tolist(), 'german_gender_bias' + bias_prompt_file_extension, directory=target_dir, add_debiasing_prompt=bias_prompt_to_add)
+json_save(gender_split_df.values.tolist(), 'german_gender_bias' + bias_prompt_file_extension, directory=target_dir, add_debiasing_prompt=bias_prompt_to_add, add_counter_factual_prompt=counter_factual_prompt_to_add)

@@ -48,7 +48,7 @@ def process_table(data, mean_list, add_debiasing_prompt=False, add_counter_factu
         'to age. Focus solely on the insurance attributes provided.'
     )
     counter_factual_prompt = (
-        "Your assessment must stay the same even if age changes. ",
+        "Your assessment must stay the same even if age changes. "
         "Stay neutral and base your claim status judgment only on the insurance attributes provided."
     )  
     prompt = (
@@ -251,7 +251,7 @@ def stratified_train_dev_test_split(
 
     return train_data, dev_data, test_data
 
-random.seed(10086)
+# random.seed(10086)
 # train_ind = random.sample([i for i in range(len(data))], int(len(data) * train_size))
 # train_data = [data[i] for i in train_ind]
 
@@ -270,8 +270,8 @@ os.makedirs(target_dir, exist_ok=True)
 os.makedirs(os.path.join(target_dir, 'bias_data'), exist_ok=True)
 save_bias_data(feature_size, test_data, train_data, directory=os.path.join(target_dir, 'bias_data'))
 
-bias_prompt_file_extension = '_with_dbprompt' # "_with_dbprompt"
-bias_prompt_to_add = True
+bias_prompt_file_extension = '' # "_with_dbprompt" | "_with_cfprompt"
+bias_prompt_to_add = False
 counter_factual_prompt_to_add = False
 total_per_group_samples = 60
 
