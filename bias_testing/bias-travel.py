@@ -6,7 +6,7 @@ from aif360.datasets import BinaryLabelDataset
 from aif360.explainers import MetricTextExplainer
 import random
 import json
-from process import predo_tra, preres_tra
+from process import predo_tra, preres_tra, compute_metrics
 import os 
 
 
@@ -56,10 +56,15 @@ def bias_test(output_df, input_test_df):
 
     return final_res
 
-train = prepare_input_data(os.path.join(current_dir, 'bias_data', 'TraIn_train.csv'))
-test = prepare_input_data(os.path.join(current_dir, 'bias_data', 'TraIn_test.csv'))
-res = prepare_output_data(os.path.join(current_dir, 'CALM', 'flare_trin_desc_write_out_info.json'), test)
+train_filename = os.path.join(current_dir, 'bias_data', 'TraIn_train.csv')
+test_filename = os.path.join(current_dir, 'bias_data', 'TraIn_test.csv')
+output_filename = os.path.join(current_dir, 'CALM', 'flare_trin_desc_write_out_info.json')
+
+train = prepare_input_data(train_filename)
+test = prepare_input_data(test_filename)
+res = prepare_output_data(output_filename, test)
 
 print("Train DI:", disparate_impact(train))
 print("Test DI:", disparate_impact(test))
 print("Bias Test:", bias_test(res, test))
+print("Results:", compute_metrics(output_filename, positive_choice='yes'))

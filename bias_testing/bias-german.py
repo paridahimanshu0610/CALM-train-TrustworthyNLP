@@ -7,7 +7,7 @@ from aif360.explainers import MetricTextExplainer
 import random
 import json
 import os
-from process import predo, preres
+from process import predo, preres, compute_metrics
 
 '''data preprocess'''
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -82,10 +82,15 @@ def bias_test(output_df, input_test_df, bias_attributes = ['Personal status and 
 
     return final_res
 
-train = prepare_input_data(os.path.join(current_dir, "bias_data", "german_train.csv"))
-test = prepare_input_data(os.path.join(current_dir, "bias_data", "german_test.csv"))
-res = prepare_output_data(os.path.join(current_dir, "CALM", "flare_german_desc_write_out_info.json"), test)
+train_filename = os.path.join(current_dir, "bias_data", "german_train.csv")
+test_filename = os.path.join(current_dir, "bias_data", "german_test.csv")
+output_filename = os.path.join(current_dir, "CALM", "flare_german_desc_write_out_info.json")
+
+train = prepare_input_data(train_filename)
+test = prepare_input_data(test_filename)
+res = prepare_output_data(output_filename, test)
 
 print("Test DI:", disparate_impact(test))
 print("Train DI", disparate_impact(train))
 print("Bias Test:", bias_test(res, test))
+print("Results:", compute_metrics(output_filename, positive_choice='good'))

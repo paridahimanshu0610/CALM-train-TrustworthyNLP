@@ -1,5 +1,6 @@
 from sklearn.preprocessing import LabelEncoder
 import json
+from sklearn.metrics import accuracy_score, f1_score, matthews_corrcoef
 
 # def predo(data):
 #     pre_data = data.copy()
@@ -123,3 +124,25 @@ def preres_cc(data, path):
                 res_data[i][-1] = 0
             else: res_data[i][-1] = 1
     return res_data,index
+
+def load_json_list(path):
+    with open(path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    if not isinstance(data, list):
+        raise ValueError("JSON file must contain a list of objects.")
+
+    return data
+
+def compute_metrics(output_filepath, positive_choice = 'good'):
+    records = load_json_list(output_filepath)
+    # Extract true and predicted labels
+    y_true = [1 if r['truth'].strip().lower() == positive_choice else 0 for r in records]
+    y_pred = [1 if r['logit_0'].strip().lower() == positive_choice else 0 for r in records]
+
+    # Compute metrics
+    acc = accuracy_score(y_true, y_pred)
+    f1 = f1_score(y_true, y_pred)
+    mcc = matthews_corrcoef(y_true, y_pred)
+
+    return {'accuracy': acc, 'F1-score': f1, 'MCC': mcc}

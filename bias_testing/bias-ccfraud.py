@@ -6,7 +6,7 @@ from aif360.datasets import BinaryLabelDataset
 from aif360.explainers import MetricTextExplainer
 import random
 import json
-from process import predo, preres_cc
+from process import predo, preres_cc, compute_metrics
 import os
 
 '''data preprocess'''
@@ -66,10 +66,15 @@ def bias_test(output_df, input_test_df):
 
     return final_res
 
-train = prepare_input_data(os.path.join(current_dir, "bias_data", "ccfraud_train.csv"))
-test = prepare_input_data(os.path.join(current_dir, "bias_data", "ccfraud_test.csv"), output_file=os.path.join(current_dir, "CALM", "flare_ccfraud_desc_write_out_info.json"))
-res = prepare_output_data(os.path.join(current_dir, "CALM", "flare_ccfraud_desc_write_out_info.json"), os.path.join(current_dir, "bias_data", "ccfraud_test.csv"))
+train_filename = os.path.join(current_dir, "bias_data", "ccfraud_train.csv")
+test_filename = os.path.join(current_dir, "bias_data", "ccfraud_test.csv")
+output_filename = os.path.join(current_dir, "CALM", "flare_ccfraud_desc_write_out_info.json")
+
+train = prepare_input_data(train_filename)
+test = prepare_input_data(test_filename, output_file=output_filename)
+res = prepare_output_data(output_filename, test_filename)
 
 print("Train DI:", disparate_impact(train))
 print("Train DI:", disparate_impact(test))
 print("Bias Test:", bias_test(res, test))
+print("Results:", compute_metrics(output_filename, positive_choice='good'))
