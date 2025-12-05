@@ -30,6 +30,7 @@ def format_input_for_qwen(instruction: dict, query_key = "normal_query", add_str
 
     example1 = instruction["example"].get("example1", {})
     example2 = instruction["example"].get("example2", {})
+    task_name = " for " + instruction.get('task', '')
     prompt = (
         "Example:\n"
         "Input: " + example1.get("input", "") + "\n"
@@ -37,7 +38,7 @@ def format_input_for_qwen(instruction: dict, query_key = "normal_query", add_str
         "Example:\n"
         "Input: " + example2.get("input", "") + "\n"
         "Output: " + example2.get("output", "") + "\n\n"
-        "Now classify the following profile:\n\n"
+        "Now classify the following profile" + task_name + ":\n\n"
         "Input: " + "'" + instruction.get("text", "")+ "'\n"
         "Final Answer:"
     )
@@ -51,7 +52,7 @@ def format_input_for_qwen(instruction: dict, query_key = "normal_query", add_str
     
     return prompt
 
-def run_qwen_inference(model, tokenizer, user_text, generation_config, choices=["yes", "no"]):
+def run_qwen_inference(model, tokenizer, user_text, generation_config, choices=["yes", "no"], debias_prompt=""):
     """
     Performs strict yes/no classification using Qwen/Qwen2/Qwen2.5.
     Ensures NO chain-of-thought and NO explanation leaks.
@@ -61,6 +62,7 @@ def run_qwen_inference(model, tokenizer, user_text, generation_config, choices=[
     choices_str = " or ".join([f"'{choice}'" for choice in choices])
     system_prompt = (
         "You are a strict binary classifier. "
+        f"{debias_prompt}" 
         f"You must respond with EXACTLY one word: {choices_str}. "
         "Do NOT output any chain-of-thought. "
         "Do NOT output <think> tags. "
@@ -119,6 +121,7 @@ def format_input_for_distill(instruction: dict, query_key="normal_query",
 
     example1 = instruction["example"].get("example1", {})
     example2 = instruction["example"].get("example2", {})
+    task_name = " for " + instruction.get('task', '')
 
     prompt = (
         "Example:\n"
@@ -127,7 +130,7 @@ def format_input_for_distill(instruction: dict, query_key="normal_query",
         "Example:\n"
         "Input: " + example2.get("input", "") + "\n"
         "Output: " + example2.get("output", "") + "\n\n"
-        "Now classify the following profile:\n\n"
+        "Now classify the following profile" + task_name + ":\n\n"
         "Input: '" + instruction.get("text", "") + "'\n"
         "Final Answer:"
     )
@@ -144,7 +147,7 @@ def format_input_for_distill(instruction: dict, query_key="normal_query",
 
     return prompt
 
-def run_distill_inference(model, tokenizer, user_text, generation_config, choices=["good", "bad"]):
+def run_distill_inference(model, tokenizer, user_text, generation_config, choices=["good", "bad"], debias_prompt=""):
     """
     Performs strict classification using DeepSeek-R1-Distill-Llama models.
     Suppresses chain-of-thought and <think> tags.
@@ -155,6 +158,7 @@ def run_distill_inference(model, tokenizer, user_text, generation_config, choice
     choices_str = " or ".join([f"'{c}'" for c in choices])
     system_prompt = (
         "You are a strict classifier. "
+        f"{debias_prompt}"
         f"You must respond with EXACTLY one word: {choices_str}. "
         "Do NOT output chain-of-thought. "
         "Do NOT output <think> tags. "
@@ -214,6 +218,7 @@ def format_input_for_finma(
 
     example1 = instruction["example"].get("example1", {})
     example2 = instruction["example"].get("example2", {})
+    task_name = " for " + instruction.get('task', '')
 
     prompt = (
         "Example:\n"
@@ -222,7 +227,7 @@ def format_input_for_finma(
         "Example:\n"
         "Input: " + example2.get("input", "") + "\n"
         "Output: " + example2.get("output", "") + "\n\n"
-        "Now classify the following profile:\n\n"
+        "Now classify the following profile" + task_name + ":\n\n"
         "Input: '" + instruction.get("text", "") + "'\n"
         "Final Answer:"
     )
@@ -372,8 +377,9 @@ if __name__ == "__main__":
     # ---------------------------
     # Load Model Config
     # ---------------------------
-    model_name = "ChanceFocus/finma-7b-full"
+    model_name = "TheFinAI/Fin-o1-8B"
     config_path = os.path.join(current_dir, "model_inference_config.json")
+    debias_prompt_key = "" # debias_prompt | counter_factual_prompt
 
     model_cfg = load_config(model_name, config_path)
     query_key = model_cfg["query_key"]
@@ -389,7 +395,7 @@ if __name__ == "__main__":
         project_dir,
         "inference",
         "model_inference",
-        model_name.replace("/", "_"),
+        model_name.split("/")[-1],
         "German_credit_scoring",
         "german_foreign_zero_shot.json"
     )
@@ -447,7 +453,7 @@ if __name__ == "__main__":
         if model_name == "TheFinAI/Fin-o1-8B":
             full_prompt = format_input_for_qwen(instruction, query_key=query_key, add_strict_prompt=False, auxiliary_prompt=auxiliary_prompt, remove_answer_string=remove_answer_string)
             print("Fin-o1-8B Full Prompt:\n", full_prompt)
-            generation_output = run_qwen_inference(model, tokenizer, full_prompt, generation_config, choices=instruction.get("choices", ["yes", "no"]))
+            generation_output = run_qwen_inference(model, tokenizer, full_prompt, generation_config, choices=instruction.get("choices", ["yes", "no"]), debias_prompt=instruction.get(debias_prompt_key, ""))
         elif model_name == "deepseek-ai/DeepSeek-R1-Distill-Llama-8B" or model_name == "hirundo-io/DeepSeek-R1-Distill-Llama-8B-Debiased":
             full_prompt = format_input_for_distill(
                 instruction,
@@ -462,7 +468,8 @@ if __name__ == "__main__":
                 tokenizer,
                 full_prompt,
                 generation_config,
-                choices=instruction.get("choices", ["good", "bad"])
+                choices=instruction.get("choices", ["good", "bad"]),
+                debias_prompt=instruction.get(debias_prompt_key, "")
             )
         elif model_name == "ChanceFocus/finma-7b-full":
             full_prompt = format_input_for_finma(

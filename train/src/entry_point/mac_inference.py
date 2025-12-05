@@ -36,10 +36,14 @@ project_dir = os.path.abspath(os.path.join(current_dir, "..", "..", ".."))
 
 # Input test data path
 split_data_dir = os.path.join(project_dir, 'data', 'split_data')
-test_data_path = os.path.join(split_data_dir, 'ccFraud_fraud_detection', "ccFraud_gender_bias.jsonl")
+# German_credit_scoring | ccFraud_fraud_detection | Travel_Insurance
+test_data_path = os.path.join(split_data_dir, 'Travel_Insurance', "travel_insurance_age_bias_with_cfprompt.jsonl") 
 
 # Output LLM generation results path
-llm_output_path = os.path.join(project_dir, 'inference', 'model_inference', 'CALM', 'ccFraud_fraud_detection', "ccFraud_zero_shot.json")
+llm_output_path = os.path.join(project_dir, 'inference', 'model_inference', 'CALM', 'Travel_Insurance', "travel_insurance_age_cf.json")
+
+# Debug parameter
+debug = True
 
 # ---------- Load JSON ----------
 instruction_list = []
@@ -290,9 +294,10 @@ if __name__ == '__main__':
             tokenizer=tokenizer,
             two_interactions=False
         )
-        print(generate_text)
-        print("True output:", instruction['answer'])
-        print("-" * 100)
+        if debug==True:
+            print("Input prompt:", instruction["chat_query"])
+            print("Model ouput", generate_text, " | True output:", instruction['answer'])
+            print("-" * 100)
         temp = transform_dict({**instruction, "llm_response": generate_text, "model_name": args['model_name']}, query_key=args['query_key'])
         llm_response.append(temp)
 
