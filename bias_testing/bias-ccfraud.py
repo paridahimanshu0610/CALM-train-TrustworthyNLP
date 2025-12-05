@@ -23,6 +23,7 @@ mean_list = ['gender', 'state','cardholder','balance','numTrans',
 # todo age 和gender需要进一步划分成二分类？
 current_dir = os.path.dirname(os.path.abspath(__file__))
 os.chdir(current_dir)
+project_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 def prepare_input_data(filename, output_file = None):
     my_data = pd.read_csv(filename, sep=',', names=[i for i in range(feature_size)])
@@ -66,15 +67,20 @@ def bias_test(output_df, input_test_df):
 
     return final_res
 
-train_filename = os.path.join(current_dir, "bias_data", "ccfraud_train.csv")
-test_filename = os.path.join(current_dir, "bias_data", "ccfraud_test.csv")
-output_filename = os.path.join(current_dir, "CALM", "flare_ccfraud_desc_write_out_info.json")
+model_name = "CALM"
+prompt_file_suffix = "_zero_shot" # "_zero_shot"
+
+train_filename = os.path.join(project_dir, "data", "split_data", "ccFraud_fraud_detection", "bias_data", "ccfraud_train.csv")
+all_test_filename = os.path.join(project_dir, "data", "split_data", "ccFraud_fraud_detection", "bias_data", "ccfraud_test.csv")
+test_filename = os.path.join(project_dir, "data", "split_data", "ccFraud_fraud_detection", "bias_data", "ccFraud_gender_split.csv")
+output_filename = os.path.join(project_dir, "inference", "model_inference", model_name, "ccFraud_fraud_detection", "ccfraud_gender" + prompt_file_suffix + ".json")
 
 train = prepare_input_data(train_filename)
+all_test =prepare_input_data(all_test_filename)
 test = prepare_input_data(test_filename, output_file=output_filename)
 res = prepare_output_data(output_filename, test_filename)
 
 print("Train DI:", disparate_impact(train))
-print("Train DI:", disparate_impact(test))
+print("Train DI:", disparate_impact(all_test))
 print("Bias Test:", bias_test(res, test))
 print("Results:", compute_metrics(output_filename, positive_choice='good'))
