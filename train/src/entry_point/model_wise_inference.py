@@ -377,7 +377,7 @@ if __name__ == "__main__":
     # ---------------------------
     # Load Model Config
     # ---------------------------
-    model_name = "TheFinAI/Fin-o1-8B"
+    model_name = "ChanceFocus/finma-7b-full"
     config_path = os.path.join(current_dir, "model_inference_config.json")
     debias_prompt_key = "" # debias_prompt | counter_factual_prompt
 
@@ -388,16 +388,16 @@ if __name__ == "__main__":
     remove_answer_string = model_cfg.get("remove_answer_string", True)
     
     # ---------- Output Path ----------
-    # German: ("German_credit_scoring", "german_gender_zero_shot.json"), ("German_credit_scoring", "german_age_zero_shot.json"), ("German_credit_scoring", "german_foreign_zero_shot.json")
-    # ccFraud: ("ccFraud_fraud_detection", "ccFraud_gender_zero_shot.json")
-    # Travel Insurance: ("Travel_Insurance", "travel_insurance_age_zero_shot.json")
+    # German: ("German_credit_scoring", "german_gender.json"), ("German_credit_scoring", "german_age.json"), ("German_credit_scoring", "german_foreign.json")
+    # ccFraud: ("ccFraud_fraud_detection", "ccFraud_gender.json")
+    # Travel Insurance: ("Travel_Insurance", "travel_insurance_age.json")
     llm_output_path = os.path.join(
         project_dir,
         "inference",
         "model_inference",
         model_name.split("/")[-1],
         "German_credit_scoring",
-        "german_foreign_zero_shot.json"
+        "german_foreign.json"
     )
 
     # ---------- Load Test Data ----------
