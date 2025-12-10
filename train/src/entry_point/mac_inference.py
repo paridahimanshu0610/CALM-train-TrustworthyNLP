@@ -18,16 +18,21 @@ import re
 # args = parser.parse_args()
 
 
-max_new_tokens = 4096
+max_new_tokens = 5 # 4096
+# generation_config = dict(
+#     temperature=0.001,
+#     top_k=30,
+#     top_p=0.85,
+#     do_sample=True,
+#     num_beams=1,
+#     repetition_penalty=1.2,
+#     max_new_tokens=max_new_tokens
+# )
 generation_config = dict(
-    temperature=0.001,
-    top_k=30,
-    top_p=0.85,
-    do_sample=True,
-    num_beams=1,
-    repetition_penalty=1.2,
-    max_new_tokens=max_new_tokens
+    do_sample=False,
+    max_new_tokens=5
 )
+
 
 
 # ---------- File paths ----------
@@ -37,10 +42,10 @@ project_dir = os.path.abspath(os.path.join(current_dir, "..", "..", ".."))
 # Input test data path
 split_data_dir = os.path.join(project_dir, 'data', 'split_data')
 # German_credit_scoring | ccFraud_fraud_detection | Travel_Insurance
-test_data_path = os.path.join(split_data_dir, 'Travel_Insurance', "travel_insurance_age_bias_with_cfprompt.jsonl") 
+test_data_path = os.path.join(split_data_dir, 'ccFraud_fraud_detection', "ccFraud_gender_bias.jsonl") 
 
 # Output LLM generation results path
-llm_output_path = os.path.join(project_dir, 'inference', 'model_inference', 'CALM', 'Travel_Insurance', "travel_insurance_age_cf.json")
+llm_output_path = os.path.join(project_dir, 'inference', 'model_inference', 'CALM_debiased', 'ccFraud_fraud_detection', "ccFraud_gender.json")
 
 # Debug parameter
 debug = True
@@ -55,7 +60,7 @@ with open(test_data_path, "r", encoding="utf-8") as f:
 # ---------- Set args here for testing ----------
 args = {
     'model_name_or_path': os.path.join(project_dir, 'models', 'Llama-2-7b-chat-hf'),  # replace with actual model path,
-    'ckpt_path': os.path.join(project_dir, 'train', 'saved_models', 'CRA-llama2-7b-chat_CRA_0.045M', 'checkpoint-7010'),  # replace with actual checkpoint path,
+    'ckpt_path': os.path.join(project_dir, 'train', 'saved_models', 'CRA-llama2-7b-chat_CRA_debiased', 'checkpoint-3612'),  # replace with actual checkpoint path,
     'llama': True,
     'mode': 'lora',
     'model_name': 'CALM',
