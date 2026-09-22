@@ -4,6 +4,11 @@ train/src/__pycache__
 train/saved_models
 train/saved_models2
 train/train.logx
+*.jsonl
+*.json
+*.log
+*.out
+*.csv
 data/original_data/bankruptcy prediction/**/*.csv
 data/original_data/bankruptcy prediction/**/*.data
 data/original_data/bankruptcy prediction/**/*.dat

@@ -15,31 +15,44 @@ def generate_and_tokenize_prompt(
     fix_length=False,
     padding_side="left",
 ):
+    source = data_point["conversations"]
+
+    # map dataset role names to chat-template roles
+    role_map = {
+        "human": "user",
+        "user": "user",
+        "system": "system",
+    }
+    messages = [
+        {
+            "role": role_map.get(sentence["from"].lower(), "assistant"),
+            "content": sentence["value"],
+        }
+        for sentence in source
+    ]
+
     input_ids = []
     labels = []
-    source = data_point["conversations"]
-    for sentence in source:
-        sentence_from = sentence["from"].lower()
-        sentence_value = (
-            "Human: \n" + sentence["value"] + "\n\nAssistant: \n"
-            if sentence_from == "human"
-            else sentence["value"]
-        )  # https://github.com/LianjiaTech/BELLE/issues/337
-        # conversation += sentence_value
-        sentence_ids = tokenizer.encode(
-            sentence_value, add_special_tokens=False
-        )  # do not add bos_token_id
-        label = (
-            copy.deepcopy(sentence_ids)
-            if sentence_from != "human"
-            else [IGNORE_INDEX] * len(sentence_ids)
+    prev_ids = []
+    for i, msg in enumerate(messages):
+        # Re-tokenize the conversation prefix through this message, then diff
+        # against the previous prefix to get exactly the tokens this turn
+        # contributed (its header tokens, content, and trailing <|eot_id|>).
+        curr_ids = tokenizer.apply_chat_template(
+            messages[: i + 1],
+            tokenize=True,
+            add_generation_prompt=False,
         )
-        input_ids += sentence_ids
-        labels += label
-        # add eos at every end of assistant sentence
-        if sentence_from != "human":
-            input_ids += [tokenizer.eos_token_id]  # make sure eos_token_id is correct
-            labels += [tokenizer.eos_token_id]
+        new_ids = curr_ids[len(prev_ids):]
+
+        if msg["role"] == "assistant":
+            labels += new_ids
+        else:
+            # mask user/system turns, but keep the tokens in input_ids so the
+            # model still sees them as context
+            labels += [IGNORE_INDEX] * len(new_ids)
+        input_ids += new_ids
+        prev_ids = curr_ids
 
     input_ids = input_ids[:model_max_length]
     labels = labels[:model_max_length]
@@ -55,7 +68,7 @@ def generate_and_tokenize_prompt(
             input_ids = [tokenizer.pad_token_id] * (
                 model_max_length - len(input_ids)
             ) + input_ids
-            labels = [tokenizer.pad_token_id] * (
+            labels = [IGNORE_INDEX] * (
                 model_max_length - len(labels)
             ) + labels
             attention_mask = [0] * (
@@ -65,7 +78,7 @@ def generate_and_tokenize_prompt(
             input_ids = input_ids + [tokenizer.pad_token_id] * (
                 model_max_length - len(input_ids)
             )
-            labels = labels + [tokenizer.pad_token_id] * (
+            labels = labels + [IGNORE_INDEX] * (
                 model_max_length - len(labels)
             )
             attention_mask = attention_mask + [0] * (

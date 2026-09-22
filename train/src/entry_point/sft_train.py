@@ -276,22 +276,28 @@ def main():
     )
 
     if model_args.llama:
-        tokenizer = LlamaTokenizer.from_pretrained(
+        tokenizer = AutoTokenizer.from_pretrained(
             model_args.model_name_or_path
         )
         print_rank_0(
-            "Set the eos_token_id and bos_token_id of LLama model tokenizer",
+            "Configuring Llama-3.1 special tokens",
             log_file,
             global_rank,
         )
-        tokenizer.eos_token_id = 2
-        tokenizer.bos_token_id = 1
+        tokenizer.bos_token_id = tokenizer.convert_tokens_to_ids("<|begin_of_text|>")
+        # Llama-3.1-Instruct ends turns with <|eot_id|>, not a single fixed eos id
+        tokenizer.eos_token_id = tokenizer.convert_tokens_to_ids("<|eot_id|>")
     else:
         tokenizer = AutoTokenizer.from_pretrained(
             model_args.model_name_or_path
         )
 
-    tokenizer.pad_token_id = 0
+    if tokenizer.pad_token_id is None:
+        # Llama-3.1 has no pad token by default; reuse a reserved special token
+        # rather than an arbitrary vocab id like 0 (which is a real token, "!")
+        tokenizer.pad_token = "<|finetune_right_pad_id|>" \
+            if "<|finetune_right_pad_id|>" in tokenizer.get_vocab() \
+            else tokenizer.eos_token
     tokenizer.padding_side = "left"  # Allow batched inference
 
     print_rank_0(
