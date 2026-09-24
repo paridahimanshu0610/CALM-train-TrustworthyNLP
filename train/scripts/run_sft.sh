@@ -1,6 +1,6 @@
 #!/bin/bash
-#SBATCH --job-name=trustworthy_nlp_calm
-#SBATCH --output=/scratch/user/paridahimanshu0610/trustworthy_nlp/CALM-train-TrustworthyNLP/train/trustworthy_nlp_calm.out
+#SBATCH --job-name=trustworthy_nlp_calm_llama31
+#SBATCH --output=/scratch/user/paridahimanshu0610/trustworthy_nlp/CALM-train-TrustworthyNLP/train/trustworthy_nlp_calm_llama31.out
 #SBATCH --partition=gpu
 #SBATCH --gres=gpu:a100:2
 #SBATCH --nodes=1
@@ -23,11 +23,19 @@ module load NCCL/2.22.3-CUDA-12.6.0
 source /scratch/user/paridahimanshu0610/trustworthy_nlp/calm_env/bin/activate
 
 ###############################
+# transformers 4.57.3 confirmed installed: supports Llama-3.1's
+# rope_scaling type, and evaluation_strategy has been renamed to
+# eval_strategy (see sft_train.py's TrainingArguments subclass and the
+# --eval_strategy flag below).
+###############################
+python -c "import transformers; print('transformers version:', transformers.__version__)"
+
+###############################
 # Grace HPRC – GPU settings
 ###############################
 # DO NOT set CUDA_VISIBLE_DEVICES manually — Slurm handles this.
 
-export WANDB_PROJECT=CRA-llama2-7b-chat
+export WANDB_PROJECT=CRA-llama3.1-8b-instruct
 export WANDB_RUN_ID=CRA_0.045M
 # export WANDB_RESUME=allow
 # export WANDB_API_KEY=YOUR_WANDB_KEY   # <-- Replace manually
@@ -38,7 +46,7 @@ export WANDB_RUN_ID=CRA_0.045M
 export ABS_PATH="/scratch/user/paridahimanshu0610/trustworthy_nlp/CALM-train-TrustworthyNLP"
 export PYTHONPATH="$ABS_PATH/train"
 
-model_name_or_path="$ABS_PATH/models/Llama-2-7b-chat-hf"
+model_name_or_path="$ABS_PATH/models/Llama-3.1-8B-Instruct"
 
 train_file="$ABS_PATH/train/data/CRA-resample-train4w.json"
 validation_file="$ABS_PATH/train/data/CRA-resample-dev3k.json"
@@ -82,7 +90,7 @@ torchrun --nproc_per_node=2 /scratch/user/paridahimanshu0610/trustworthy_nlp/CAL
     --warmup_ratio 0.01 \
     --lr_scheduler_type "cosine" \
     --logging_steps 10 \
-    --evaluation_strategy "steps" \
+    --eval_strategy "steps" \
     --seed 1234 \
     --gradient_checkpointing \
     --cache_dir ${cache_dir} \

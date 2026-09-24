@@ -1,4 +1,3 @@
-
 from transformers.utils import add_start_docstrings
 from transformers.trainer_utils import get_last_checkpoint
 from transformers.trainer_pt_utils import torch_distributed_zero_first
@@ -149,7 +148,13 @@ class TrainingArguments(TrainingArguments):
         default=False, metadata={"help": "gradient_checkpointing"}
     )
     # https://discuss.huggingface.co/t/wandb-does-not-display-train-eval-loss-except-for-last-one/9170
-    evaluation_strategy: str = field(
+    # NOTE: as of transformers >=4.46, `evaluation_strategy` was deprecated in
+    # favor of `eval_strategy`, and it was fully removed from the base
+    # TrainingArguments by ~4.54. Re-declaring it as `evaluation_strategy`
+    # here no longer overrides the base class's actual eval-strategy field,
+    # so it would silently do nothing (eval would stay at the base default,
+    # "no", and never run) — hence the rename to `eval_strategy`.
+    eval_strategy: str = field(
         default="steps", metadata={"help": "The evaluation strategy to use."}
     )
     save_total_limit: Optional[int] = field(
