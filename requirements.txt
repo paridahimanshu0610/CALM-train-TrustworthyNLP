@@ -10,3 +10,4 @@ bitsandbytes
 deepspeed
 sklearn
 arff
+aif360

@@ -9,6 +9,8 @@ train/train.logx
 *.log
 *.out
 *.csv
+*.pyc
+__pycache__
 data/original_data/bankruptcy prediction/**/*.csv
 data/original_data/bankruptcy prediction/**/*.data
 data/original_data/bankruptcy prediction/**/*.dat
