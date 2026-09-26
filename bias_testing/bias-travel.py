@@ -27,18 +27,19 @@ def prepare_input_data(filename):
     return input_data_df   
 
 def prepare_output_data(output_filename, test_data_df):
-    output_data = preres_tra(test_data_df.values.tolist(), output_filename, target_index = 4)
+    output_data, index_to_drop = preres_tra(test_data_df.values.tolist(), output_filename, target_index=4)
     output_data_df = pd.DataFrame(output_data)
     output_data_df.columns = mean_list
-    return output_data_df    
+    if index_to_drop:
+        output_data_df = output_data_df.drop(index_to_drop).reset_index(drop=True)
+    return output_data_df, index_to_drop
 
 def disparate_impact(input_df):
     input_data = BinaryLabelDataset(favorable_label=0, unfavorable_label=1, df=input_df, label_names=['target'], protected_attribute_names=['Age'])
     final_res = dict()
-    
-    # Gender DI
+
+    # Age DI
     metric = BinaryLabelDatasetMetric(input_data, unprivileged_groups=[{'Age':1}], privileged_groups=[{'Age':0}])
-    # text_res = MetricTextExplainer(metric)        
     final_res['Age'] = metric.disparate_impact()
 
     return final_res
@@ -50,7 +51,6 @@ def bias_test(output_df, input_test_df):
 
     # Age EOD and AOD
     metric = ClassificationMetric(input_test_data, llm_output_data, unprivileged_groups=[{'Age':1}], privileged_groups=[{'Age':0}])
-    # text_res = MetricTextExplainer(metric)        
     final_res['EOD']["Age"] = metric.equal_opportunity_difference()
     final_res['AOD']["Age"] = metric.average_odds_difference()
 
@@ -61,16 +61,20 @@ prompt_file_suffix = "_zero_shot" # "_zero_shot" | "_cf"
 
 train_filename = os.path.join(project_dir, "data", "split_data", "Travel_Insurance", "bias_data", "TraIn_train.csv")
 all_test_filename = os.path.join(project_dir, "data", "split_data", "Travel_Insurance", "bias_data", "TraIn_test.csv")
-test_filename = os.path.join(project_dir, "data", "split_data", "Travel_Insurance", "bias_data", "travel_insurance_age_split.csv")
+attribute_test_filename = os.path.join(project_dir, "data", "split_data", "Travel_Insurance", "bias_data", "travel_insurance_age_split.csv")
 output_filename = os.path.join(project_dir, "inference", "model_inference", model_name, "Travel_Insurance", "travel_insurance_age" + prompt_file_suffix + ".json")
 
 
 train = prepare_input_data(train_filename)
-all_test =prepare_input_data(all_test_filename)
-test = prepare_input_data(test_filename)
-res = prepare_output_data(output_filename, test)
+test = prepare_input_data(all_test_filename)
+attribute_test = prepare_input_data(attribute_test_filename)
+res, dropped_idx = prepare_output_data(output_filename, attribute_test)
+
+# Keep attribute_test aligned with res by dropping the same missing-response rows
+if dropped_idx:
+    attribute_test = attribute_test.drop(dropped_idx).reset_index(drop=True)
 
 print("Train DI:", disparate_impact(train))
-print("Test DI:", disparate_impact(all_test))
-print("Bias Test:", bias_test(res, test))
+print("Test DI:", disparate_impact(test))
+print("Bias Test:", bias_test(res, attribute_test))
 print("Results:", compute_metrics(output_filename, positive_choice='yes'))

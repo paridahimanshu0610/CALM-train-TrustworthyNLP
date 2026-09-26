@@ -101,15 +101,18 @@ def preres(data, path):
 
 def preres_tra(data, path, target_index = 4):
     res_data = data
+    index = []
     with open(path, 'r', encoding='utf-8') as file:
         file_json = json.load(file)
         for i, text in enumerate(file_json):
-            if text['truth']=='no' and text['acc']=='1.0':
+            if text['missing'] == '1':
+                index.append(i)
+            elif text['truth']=='no' and text['acc']=='1.0':
                 res_data[i][target_index] = 0
             elif text['truth']=='yes' and text['acc']=='0.0':
                 res_data[i][target_index] = 0
             else: res_data[i][target_index] = 1
-    return res_data
+    return res_data, index
 
 def preres_cc(data, path):
     res_data = data
