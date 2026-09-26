@@ -36,9 +36,10 @@ def predo(data):
     pre_data.loc[pre_data[8] == 'A94', 8] = 0   #  'male and married or widowed'
     pre_data.loc[pre_data[8] == 'A95', 8] = 1   #  'female and single'
 
-    # Encode other object columns
+    # Encode remaining object columns — EXCLUDE column 8, it's already recoded above
     s = (data.dtypes == 'object')
     object_cols = list(s[s].index)
+    object_cols = [col for col in object_cols if col != 8]
 
     label_encoder = LabelEncoder()
     for col in object_cols:
@@ -85,15 +86,18 @@ def predo_tra(data):
 
 def preres(data, path):
     res_data = data
+    index = []
     with open(path, 'r', encoding='utf-8') as file:
         file_json = json.load(file)
         for i, text in enumerate(file_json):
-            if text['truth']=='good' and text['acc']=='1.0':
+            if text['missing'] == '1':
+                index.append(i)
+            elif text['truth']=='good' and text['acc']=='1.0':
                 res_data[i][-1] = 1
             elif text['truth']=='bad' and text['acc']=='0.0':
                 res_data[i][-1] = 1
             else: res_data[i][-1] = 2
-    return res_data
+    return res_data, index
 
 def preres_tra(data, path, target_index = 4):
     res_data = data

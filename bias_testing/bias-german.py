@@ -31,31 +31,30 @@ def prepare_input_data(filename):
     return my_data_df
 
 def prepare_output_data(output_filename, my_test_df):
-    my_data = preres(my_test_df.values.tolist(), output_filename)
+    my_data, index_to_drop = preres(my_test_df.values.tolist(), output_filename)
     my_data_df = pd.DataFrame(my_data)
     my_data_df.columns = mean_list
-    return my_data_df
+    if index_to_drop:
+        my_data_df = my_data_df.drop(index_to_drop).reset_index(drop=True)
+    return my_data_df, index_to_drop
 
 def disparate_impact(input_df, bias_attributes = ['Personal status and sex', 'Age in years','foreign worker'], desired_attribute = None):
     input_data = BinaryLabelDataset(favorable_label=1, unfavorable_label=2, df=input_df, label_names=['target'], protected_attribute_names=bias_attributes)
     final_res = dict()
-    
+
     # Foreigner DI
     if (desired_attribute == "foreign") or (not desired_attribute):
         metric = BinaryLabelDatasetMetric(input_data, unprivileged_groups=[{'foreign worker':0}], privileged_groups=[{'foreign worker':1}])
-        # text_res = MetricTextExplainer(metric)        
         final_res['Foreigner'] = metric.disparate_impact()
 
     # Age DI
     if (desired_attribute == "age") or (not desired_attribute):
         metric = BinaryLabelDatasetMetric(input_data, unprivileged_groups=[{'Age in years':1}], privileged_groups=[{'Age in years':0}])
-        # text_res = MetricTextExplainer(metric)        
         final_res['Age'] = metric.disparate_impact()
 
     # Gender DI
     if (desired_attribute == "gender") or (not desired_attribute):
         metric = BinaryLabelDatasetMetric(input_data, unprivileged_groups=[{'Personal status and sex':1}], privileged_groups=[{'Personal status and sex':0}])
-        # text_res = MetricTextExplainer(metric)        
         final_res['Gender'] = metric.disparate_impact()
 
     return final_res
@@ -64,25 +63,22 @@ def bias_test(output_df, input_test_df, bias_attributes = ['Personal status and 
     llm_output_data = BinaryLabelDataset(favorable_label=1, unfavorable_label=2, df=output_df, label_names=['target'], protected_attribute_names=bias_attributes)
     input_test_data = BinaryLabelDataset(favorable_label=1, unfavorable_label=2, df=input_test_df, label_names=['target'], protected_attribute_names=bias_attributes)
     final_res = {'EOD': {}, "AOD": {}}
-    
+
     # Foreigner EOD and AOD
     if (desired_attribute == "foreign") or (not desired_attribute):
         metric = ClassificationMetric(input_test_data, llm_output_data, unprivileged_groups=[{'foreign worker':0}], privileged_groups=[{'foreign worker':1}])
-        # text_res = MetricTextExplainer(metric)        
         final_res['EOD']["Foreigner"] = metric.equal_opportunity_difference()
         final_res['AOD']["Foreigner"] = metric.average_odds_difference()
 
     # Age EOD and AOD
     if (desired_attribute == "age") or (not desired_attribute):
         metric = ClassificationMetric(input_test_data, llm_output_data, unprivileged_groups=[{'Age in years':1}], privileged_groups=[{'Age in years':0}])
-        # text_res = MetricTextExplainer(metric)      
         final_res['EOD']["Age"] = metric.equal_opportunity_difference()
         final_res['AOD']["Age"] = metric.average_odds_difference()
 
     # Gender EOD and AOD
     if (desired_attribute == "gender") or (not desired_attribute):
         metric = ClassificationMetric(input_test_data, llm_output_data, unprivileged_groups=[{'Personal status and sex':1}], privileged_groups=[{'Personal status and sex':0}])
-        # text_res = MetricTextExplainer(metric)        
         final_res['EOD']["Gender"] = metric.equal_opportunity_difference()
         final_res['AOD']["Gender"] = metric.average_odds_difference()
 
@@ -94,15 +90,19 @@ prompt_file_suffix = "_cf" # "_zero_shot" | "_cf"
 
 train_filename = os.path.join(project_dir, "data", "split_data", "German_credit_scoring", "bias_data", "german_train.csv")
 all_test_filename = os.path.join(project_dir, "data", "split_data", "German_credit_scoring", "bias_data", "german_test.csv")
-test_filename = os.path.join(project_dir, "data", "split_data", "German_credit_scoring", "bias_data", "german_" + current_target_feature + "_split.csv")
+attribute_test_filename = os.path.join(project_dir, "data", "split_data", "German_credit_scoring", "bias_data", "german_" + current_target_feature + "_split.csv")
 output_filename = os.path.join(project_dir, "inference", "model_inference", model_name, "German_credit_scoring", "german_" + current_target_feature + prompt_file_suffix + ".json")
 
 train = prepare_input_data(train_filename)
-all_test =prepare_input_data(all_test_filename)
-test = prepare_input_data(test_filename)
-res = prepare_output_data(output_filename, test)
+test = prepare_input_data(all_test_filename)
+attribute_test = prepare_input_data(attribute_test_filename)
+res, dropped_idx = prepare_output_data(output_filename, attribute_test)
+
+# Keep attribute_test aligned with res by dropping the same missing-response rows
+if dropped_idx:
+    attribute_test = attribute_test.drop(dropped_idx).reset_index(drop=True)
 
 print("Train DI", disparate_impact(train, desired_attribute = current_target_feature))
-print("Test DI:", disparate_impact(all_test, desired_attribute = current_target_feature))
-print("Bias Test:", bias_test(res, test, desired_attribute = current_target_feature))
+print("Test DI:", disparate_impact(test, desired_attribute = current_target_feature))
+print("Bias Test:", bias_test(res, attribute_test, desired_attribute = current_target_feature))
 print("Results:", compute_metrics(output_filename, positive_choice='good'))
