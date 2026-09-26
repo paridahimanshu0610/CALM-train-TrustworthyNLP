@@ -27,6 +27,7 @@ def prepare_input_data(filename):
     return input_data_df   
 
 def prepare_output_data(output_filename, test_data_df):
+    # When model predicts "no" for a record, we set target_index value to 0.
     output_data, index_to_drop = preres_tra(test_data_df.values.tolist(), output_filename, target_index=4)
     output_data_df = pd.DataFrame(output_data)
     output_data_df.columns = mean_list
@@ -45,6 +46,8 @@ def disparate_impact(input_df):
     return final_res
 
 def bias_test(output_df, input_test_df):
+    # When model predicts "no" for a record, we set target_index value to 0. So, a model response of no (i.e. no claim filed) is considered as favorable (0).
+    # Favorable label is the one which is considered as the positive outcome. In this case, a model response of no (i.e. no claim filed) is considered as a postive outcome.
     llm_output_data = BinaryLabelDataset(favorable_label=0, unfavorable_label=1, df=output_df, label_names=['target'], protected_attribute_names=['Age'])
     input_test_data = BinaryLabelDataset(favorable_label=0, unfavorable_label=1, df=input_test_df, label_names=['target'], protected_attribute_names=['Age'])
     final_res = {'EOD': {}, "AOD": {}, "AAOD": {}, "FPRD": {}, "ERR": {}, "ERD": {}}
@@ -81,4 +84,6 @@ if dropped_idx:
 print("Train DI:", disparate_impact(train))
 print("Test DI:", disparate_impact(test))
 print("Bias Test:", bias_test(res, attribute_test))
-print("Results:", compute_metrics(output_filename, positive_choice='yes'))
+# When model predicts "no" for a record, we set target_index value to 0. So, a model response of no (i.e. no claim filed) is considered as favorable (0).
+# Favorable label is the one which is considered as the positive outcome (See doc of aif360.datasets.BinaryLabelDataset). In this case, a model response of no (i.e. no claim filed) is considered as a postive outcome.
+print("Results:", compute_metrics(output_filename, positive_choice='no'))

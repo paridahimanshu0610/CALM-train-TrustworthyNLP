@@ -109,6 +109,7 @@ def preres(data, path):
 def preres_tra(data, path, target_index = 4):
     res_data = data
     index = []
+    # When model predicts "no" for a record, we set target_index value to 0.
     with open(path, 'r', encoding='utf-8') as file:
         file_json = json.load(file)
         for i, text in enumerate(file_json):
