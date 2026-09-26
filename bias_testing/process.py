@@ -29,16 +29,22 @@ from sklearn.metrics import accuracy_score, f1_score, matthews_corrcoef
 def predo(data):
     pre_data = data.copy()
 
-    # Gender recoding using .loc
-    pre_data.loc[pre_data[8] == 'A91', 8] = 0   #  'male: divorced or separated'
-    pre_data.loc[pre_data[8] == 'A92', 8] = 1   #  'female: divorced or separated or married'
-    pre_data.loc[pre_data[8] == 'A93', 8] = 0   #  'male and single'
-    pre_data.loc[pre_data[8] == 'A94', 8] = 0   #  'male and married or widowed'
-    pre_data.loc[pre_data[8] == 'A95', 8] = 1   #  'female and single'
+    # Gender recoding using .replace() — NOTE: pandas 3.0's 'string' dtype rejects
+    # mixing int values into a still-string column via element-wise .loc assignment
+    # (raises TypeError: Invalid value '0' for dtype 'str'). .replace() correctly
+    # converts the column's dtype instead.
+    pre_data[8] = pre_data[8].replace({
+        'A91': 0,  # male: divorced or separated
+        'A92': 1,  # female: divorced or separated or married
+        'A93': 0,  # male and single
+        'A94': 0,  # male and married or widowed
+        'A95': 1,  # female and single
+    })
 
-    # Encode remaining object columns — EXCLUDE column 8, it's already recoded above
-    s = (data.dtypes == 'object')
-    object_cols = list(s[s].index)
+    # Encode remaining object/string columns — EXCLUDE column 8, it's already recoded above
+    # NOTE: pandas 3.0+ infers CSV text columns as the new 'string' dtype rather than
+    # legacy 'object', so we must check for both or these columns get silently skipped.
+    object_cols = data.select_dtypes(include=['object', 'string']).columns.tolist()
     object_cols = [col for col in object_cols if col != 8]
 
     label_encoder = LabelEncoder()
@@ -68,9 +74,10 @@ def predo(data):
 #     return pre_data.values.tolist()
 
 def predo_tra(data):
-    # Identify object columns
-    s = (data.dtypes == 'object')
-    object_cols = list(s[s].index)
+    # Identify object/string columns
+    # NOTE: pandas 3.0+ infers CSV text columns as the new 'string' dtype rather than
+    # legacy 'object', so we must check for both or these columns get silently skipped.
+    object_cols = data.select_dtypes(include=['object', 'string']).columns.tolist()
     pre_data = data.copy()
     label_encoder = LabelEncoder()
     for col in object_cols:

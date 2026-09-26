@@ -62,36 +62,48 @@ def disparate_impact(input_df, bias_attributes = ['Personal status and sex', 'Ag
 def bias_test(output_df, input_test_df, bias_attributes = ['Personal status and sex', 'Age in years','foreign worker'], desired_attribute = None):
     llm_output_data = BinaryLabelDataset(favorable_label=1, unfavorable_label=2, df=output_df, label_names=['target'], protected_attribute_names=bias_attributes)
     input_test_data = BinaryLabelDataset(favorable_label=1, unfavorable_label=2, df=input_test_df, label_names=['target'], protected_attribute_names=bias_attributes)
-    final_res = {'EOD': {}, "AOD": {}}
+    final_res = {'EOD': {}, "AOD": {}, "AAOD": {}, "FPRD": {}, "ERR": {}, "ERD": {}}
 
     # Foreigner EOD and AOD
     if (desired_attribute == "foreign") or (not desired_attribute):
         metric = ClassificationMetric(input_test_data, llm_output_data, unprivileged_groups=[{'foreign worker':0}], privileged_groups=[{'foreign worker':1}])
         final_res['EOD']["Foreigner"] = metric.equal_opportunity_difference()
         final_res['AOD']["Foreigner"] = metric.average_odds_difference()
+        final_res['AAOD']["Foreigner"] = metric.average_abs_odds_difference()
+        final_res['FPRD']["Foreigner"] = metric.false_positive_rate_difference()
+        final_res['ERR']["Foreigner"] = metric.error_rate_ratio()
+        final_res['ERD']["Foreigner"] = metric.error_rate_difference()
 
     # Age EOD and AOD
     if (desired_attribute == "age") or (not desired_attribute):
         metric = ClassificationMetric(input_test_data, llm_output_data, unprivileged_groups=[{'Age in years':1}], privileged_groups=[{'Age in years':0}])
         final_res['EOD']["Age"] = metric.equal_opportunity_difference()
         final_res['AOD']["Age"] = metric.average_odds_difference()
+        final_res['AAOD']["Age"] = metric.average_abs_odds_difference()
+        final_res['FPRD']["Age"] = metric.false_positive_rate_difference()
+        final_res['ERR']["Age"] = metric.error_rate_ratio()
+        final_res['ERD']["Age"] = metric.error_rate_difference()
 
     # Gender EOD and AOD
     if (desired_attribute == "gender") or (not desired_attribute):
         metric = ClassificationMetric(input_test_data, llm_output_data, unprivileged_groups=[{'Personal status and sex':1}], privileged_groups=[{'Personal status and sex':0}])
         final_res['EOD']["Gender"] = metric.equal_opportunity_difference()
         final_res['AOD']["Gender"] = metric.average_odds_difference()
+        final_res['AAOD']["Gender"] = metric.average_abs_odds_difference()
+        final_res['FPRD']["Gender"] = metric.false_positive_rate_difference()
+        final_res['ERR']["Gender"] = metric.error_rate_ratio()
+        final_res['ERD']["Gender"] = metric.error_rate_difference()
 
     return final_res
 
-model_name = "CALM"
-current_target_feature = "foreign" # {"gender", "age", "foreign"}
-prompt_file_suffix = "_cf" # "_zero_shot" | "_cf"
+model_name = "CRA-llama3.1-8b-instruct_CRA_0.045M_checkpoint-7010"
+current_target_feature = "gender" # {"gender", "age", "foreign"}
+prompt_file_suffix = "_bias" # "_zero_shot" | "_cf"
 
 train_filename = os.path.join(project_dir, "data", "split_data", "German_credit_scoring", "bias_data", "german_train.csv")
 all_test_filename = os.path.join(project_dir, "data", "split_data", "German_credit_scoring", "bias_data", "german_test.csv")
 attribute_test_filename = os.path.join(project_dir, "data", "split_data", "German_credit_scoring", "bias_data", "german_" + current_target_feature + "_split.csv")
-output_filename = os.path.join(project_dir, "inference", "model_inference", model_name, "German_credit_scoring", "german_" + current_target_feature + prompt_file_suffix + ".json")
+output_filename = os.path.join(project_dir, "inference", "hprc", "model_inference", model_name, "German_credit_scoring", "german_" + current_target_feature + prompt_file_suffix + ".json")
 
 train = prepare_input_data(train_filename)
 test = prepare_input_data(all_test_filename)

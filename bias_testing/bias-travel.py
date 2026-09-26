@@ -47,22 +47,26 @@ def disparate_impact(input_df):
 def bias_test(output_df, input_test_df):
     llm_output_data = BinaryLabelDataset(favorable_label=0, unfavorable_label=1, df=output_df, label_names=['target'], protected_attribute_names=['Age'])
     input_test_data = BinaryLabelDataset(favorable_label=0, unfavorable_label=1, df=input_test_df, label_names=['target'], protected_attribute_names=['Age'])
-    final_res = {'EOD': {}, "AOD": {}}
+    final_res = {'EOD': {}, "AOD": {}, "AAOD": {}, "FPRD": {}, "ERR": {}, "ERD": {}}
 
     # Age EOD and AOD
     metric = ClassificationMetric(input_test_data, llm_output_data, unprivileged_groups=[{'Age':1}], privileged_groups=[{'Age':0}])
     final_res['EOD']["Age"] = metric.equal_opportunity_difference()
     final_res['AOD']["Age"] = metric.average_odds_difference()
+    final_res['AAOD']["Age"] = metric.average_abs_odds_difference()
+    final_res['FPRD']["Age"] = metric.false_positive_rate_difference()
+    final_res['ERR']["Age"] = metric.error_rate_ratio()
+    final_res['ERD']["Age"] = metric.error_rate_difference()
 
     return final_res
 
-model_name = "CALM"
-prompt_file_suffix = "_zero_shot" # "_zero_shot" | "_cf"
+model_name = "CRA-llama3.1-8b-instruct_CRA_0.045M_checkpoint-7010"
+prompt_file_suffix = "_bias" # "_zero_shot" | "_cf"
 
 train_filename = os.path.join(project_dir, "data", "split_data", "Travel_Insurance", "bias_data", "TraIn_train.csv")
 all_test_filename = os.path.join(project_dir, "data", "split_data", "Travel_Insurance", "bias_data", "TraIn_test.csv")
 attribute_test_filename = os.path.join(project_dir, "data", "split_data", "Travel_Insurance", "bias_data", "travel_insurance_age_split.csv")
-output_filename = os.path.join(project_dir, "inference", "model_inference", model_name, "Travel_Insurance", "travel_insurance_age" + prompt_file_suffix + ".json")
+output_filename = os.path.join(project_dir, "inference", "hprc", "model_inference", model_name, "Travel_Insurance", "travel_insurance_age" + prompt_file_suffix + ".json")
 
 
 train = prepare_input_data(train_filename)
