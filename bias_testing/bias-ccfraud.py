@@ -26,6 +26,13 @@ os.chdir(current_dir)
 project_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 def prepare_input_data(filename, output_file = None):
+    """
+    output_file is the filepath of the model's inference result.
+    In the inference output file, there could be some records for which 
+    the model failed to generate output values i.e. text['missing']=='1'.
+    Now, as we are comparing the records in filename with the records in 
+    output_file, we should remove those records for which  text['missing']=='1'. 
+    """
     my_data = pd.read_csv(filename, sep=',', names=[i for i in range(feature_size)])
     my_data_df = pd.DataFrame(my_data)
     my_data_df.columns = mean_list
@@ -71,16 +78,16 @@ model_name = "CALM"
 prompt_file_suffix = "_cf" # "_zero_shot" | "_cf"
 
 train_filename = os.path.join(project_dir, "data", "split_data", "ccFraud_fraud_detection", "bias_data", "ccfraud_train.csv")
-all_test_filename = os.path.join(project_dir, "data", "split_data", "ccFraud_fraud_detection", "bias_data", "ccfraud_test.csv")
-test_filename = os.path.join(project_dir, "data", "split_data", "ccFraud_fraud_detection", "bias_data", "ccFraud_gender_split.csv")
+test_filename = os.path.join(project_dir, "data", "split_data", "ccFraud_fraud_detection", "bias_data", "ccfraud_test.csv")
+attribute_test_filename = os.path.join(project_dir, "data", "split_data", "ccFraud_fraud_detection", "bias_data", "ccFraud_gender_split.csv")
 output_filename = os.path.join(project_dir, "inference", "model_inference", model_name, "ccFraud_fraud_detection", "ccfraud_gender" + prompt_file_suffix + ".json")
 
 train = prepare_input_data(train_filename)
-all_test =prepare_input_data(all_test_filename)
-test = prepare_input_data(test_filename, output_file=output_filename)
-res = prepare_output_data(output_filename, test_filename)
+test = prepare_input_data(test_filename)
+attribute_test_reference = prepare_input_data(attribute_test_filename, output_file=output_filename)
+res = prepare_output_data(output_filename, attribute_test_filename)
 
 print("Train DI:", disparate_impact(train))
-print("Train DI:", disparate_impact(all_test))
-print("Bias Test:", bias_test(res, test))
+print("Test DI:", disparate_impact(test))
+print("Bias Test:", bias_test(res, attribute_test_reference))
 print("Results:", compute_metrics(output_filename, positive_choice='good'))
