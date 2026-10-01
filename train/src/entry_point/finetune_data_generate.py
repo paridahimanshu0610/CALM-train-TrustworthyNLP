@@ -1,365 +1,343 @@
-import numpy as np
+"""
+Generate counterfactual training examples for the German Credit dataset
+records found inside a larger multi-dataset training file.
+
+Targeted (not uniform) augmentation, per our bias diagnosis:
+  - Gender / Foreigner: only flip privileged-group + BAD-labeled records
+    (male->female, non-foreign->foreign), keeping the label "bad".
+    This targets the FPR gap specifically (leniency bias).
+  - Age: flip YOUNG records to OLD, split by label:
+      young+good -> old+good   (targets the EOD / false-negative gap)
+      young+bad  -> old+bad    (targets the FPR / false-positive gap)
+"""
+
 import json
 import re
-import copy
-import random
+import numpy as np
+import pandas as pd
 
-def create_age_buckets(ages):
-    """
-    Create age buckets based on quantiles.
-    Input: list of ages (continuous).
-    Output: dict with bucket names and representative ages.
-    """
-    ages = np.array(ages)
-    
-    buckets = {
-        "young":   int(np.percentile(ages, 20)),
-        "middle":  int(np.percentile(ages, 50)),
-        "senior":  int(np.percentile(ages, 80))
+# ---------------------------------------------------------------------------
+# Constants: code <-> human-readable text mappings used in the prompt text
+# ---------------------------------------------------------------------------
+
+AGE_THRESHOLD = 45
+
+STATUS_MAP = {
+    'A91': 'male: divorced or separated',
+    'A92': 'female: divorced or separated or married',
+    'A93': 'male and single',
+    'A94': 'male and married or widowed',
+    'A95': 'female and single',
+}
+EMPLOYMENT_MAP = {
+    'A71': 'unemployed',
+    'A72': 'smaller than 1 year',
+    'A73': 'bigger than 1  smaller than 4 years',
+    'A74': 'bigger than 4  smaller than 7 years',
+    'A75': 'bigger than 7 years',
+}
+HOUSING_MAP = {
+    'A151': 'rent',
+    'A152': 'own',
+    'A153': 'for free',
+}
+GENDER_MAP = {'A91': 'male', 'A93': 'male', 'A94': 'male', 'A92': 'female', 'A95': 'female'}
+
+REVERSE_STATUS_MAP = {v: k for k, v in STATUS_MAP.items()}
+REVERSE_EMPLOYMENT_MAP = {v: k for k, v in EMPLOYMENT_MAP.items()}
+REVERSE_HOUSING_MAP = {v: k for k, v in HOUSING_MAP.items()}
+
+GERMAN_MARKER = "For instance, 'The client has a stable income, no previous debts, and owns a property.' should be classified as 'good'."
+
+RNG = np.random.default_rng(42)
+
+
+# ---------------------------------------------------------------------------
+# Part 1: distribution-building + flip helpers
+# ---------------------------------------------------------------------------
+
+def _age_group(age):
+    return 'young' if age <= AGE_THRESHOLD else 'old'
+
+
+def _opposite_gender(gender):
+    return 'female' if gender == 'male' else 'male'
+
+
+def build_conditional_distributions_joint(df, group_col):
+    dist = {}
+    for g, sub in df.groupby(group_col):
+        pair_counts = sub.groupby(['employment_since', 'housing']).size()
+        pair_probs = (pair_counts / pair_counts.sum()).to_dict()
+        dist[g] = {
+            'pair_dist': pair_probs,
+            'age_pool': sub['age'].to_numpy(),
+        }
+    return dist
+
+
+def _sample_pair(pair_dist, rng):
+    pairs = list(pair_dist.keys())
+    probs = np.array(list(pair_dist.values()))
+    probs = probs / probs.sum()
+    idx = rng.choice(len(pairs), p=probs)
+    return pairs[idx]
+
+
+def sample_old_attributes(age_cond_dist, rng=RNG):
+    """Sample an (age, employment_since, housing) triple from the 'old' group."""
+    target_dist = age_cond_dist['old']
+    new_age = int(rng.choice(target_dist['age_pool']))
+    new_employment_since, new_housing = _sample_pair(target_dist['pair_dist'], rng)
+    return {'age': new_age, 'employment_since': new_employment_since, 'housing': new_housing}
+
+
+def sample_gender_attributes(target_gender, gender_cond_dist, rng=RNG):
+    """Sample an (employment_since, housing) pair from the target gender's distribution."""
+    target_dist = gender_cond_dist[target_gender]
+    new_employment_since, new_housing = _sample_pair(target_dist['pair_dist'], rng)
+    return {'gender': target_gender, 'employment_since': new_employment_since, 'housing': new_housing}
+
+
+# ---------------------------------------------------------------------------
+# Part 2: gender <-> personal_status_sex code heuristic
+# ---------------------------------------------------------------------------
+
+def flip_personal_status(status_code, df):
+    direct_flip = {
+        'A93': 'A95',  # male and single -> female and single
+        'A95': 'A93',  # female and single -> male and single
+        'A91': 'A92',  # male divorced/separated -> female divorced/separated/married
+        'A94': 'A92',  # male married/widowed -> female divorced/separated/married
     }
-    return buckets
+    if status_code in direct_flip:
+        return direct_flip[status_code]
+
+    if status_code == 'A92':
+        counts = df['personal_status_sex'].value_counts()
+        a91, a94 = counts.get('A91', 0), counts.get('A94', 0)
+        total = a91 + a94
+        p_a91 = a91 / total if total > 0 else 0.5
+        return 'A91' if RNG.random() < p_a91 else 'A94'
+
+    raise ValueError(f"Unrecognized personal_status_sex code: {status_code}")
 
 
-def generate_counterfactual_ages(original_age, buckets):
+# ---------------------------------------------------------------------------
+# Part 3: text parsing / editing helpers
+# ---------------------------------------------------------------------------
+
+def is_german_record(human_text):
+    return GERMAN_MARKER in human_text
+
+
+def extract_field_value(text, field_label):
+    pattern = re.compile(
+        r"The state of\s+" + re.escape(field_label) + r"\s+is\s+(.*?)\.\s*(?:The state of|')",
+        re.IGNORECASE,
+    )
+    match = pattern.search(text)
+    return match.group(1).strip() if match else None
+
+
+def replace_field_value(text, field_label, new_value):
+    pattern = re.compile(
+        r"(The state of\s+" + re.escape(field_label) + r"\s+is\s+)(.*?)(\.\s*(?:The state of|'))",
+        re.IGNORECASE,
+    )
+
+    def _sub(match):
+        return match.group(1) + new_value + match.group(3)
+
+    new_text, n_subs = pattern.subn(_sub, text, count=1)
+    if n_subs == 0:
+        raise ValueError(f"Could not find field '{field_label}' in text to replace.")
+    return new_text
+
+
+def get_human_message(conversations):
+    for turn in conversations:
+        if turn.get('from') == 'human':
+            return turn
+    return None
+
+
+def get_assistant_label(conversations):
+    """Return the assistant's 'good'/'bad' label for this record, lowercased."""
+    for turn in conversations:
+        if turn.get('from') == 'assistant':
+            return turn['value'].strip().lower()
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Part 4: parse a German record's relevant fields in one place
+# ---------------------------------------------------------------------------
+
+def parse_german_record(record):
     """
-    Given an original age and bucket representatives, 
-    return counterfactual ages taken from *other buckets*.
+    Extract everything we need to decide whether/how to build a counterfactual:
+    age, gender (derived from personal_status_sex), foreign-worker status, and label.
+    Returns None if any field can't be parsed.
     """
-    # Determine which bucket original_age belongs to
-    young, middle, senior = buckets["young"], buckets["middle"], buckets["senior"]
-    
-    if original_age <= young:
-        original_bucket = "young"
-    elif original_age <= middle:
-        original_bucket = "middle"
-    elif original_age <= senior:
-        original_bucket = "senior"
+    human_turn = get_human_message(record['conversations'])
+    if human_turn is None:
+        return None
+    text = human_turn['value']
+    if not is_german_record(text):
+        return None
+
+    age_text = extract_field_value(text, "Age in years")
+    status_text = extract_field_value(text, "Personal status and sex")
+    foreign_text = extract_field_value(text, "foreign worker")
+    label = get_assistant_label(record['conversations'])
+
+    if age_text is None or status_text is None or foreign_text is None or label is None:
+        return None
+
+    status_code = REVERSE_STATUS_MAP.get(status_text)
+    if status_code is None:
+        return None
+
+    return {
+        'text': text,
+        'age': int(age_text),
+        'status_code': status_code,
+        'gender': GENDER_MAP.get(status_code),
+        'foreign': foreign_text.strip().lower(),
+        'label': label,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Part 5: build one counterfactual record, given the fields to change
+# ---------------------------------------------------------------------------
+
+def build_record_with_text(record, new_text, suffix):
+    new_record = json.loads(json.dumps(record))  # deep copy
+    new_human_turn = get_human_message(new_record['conversations'])
+    new_human_turn['value'] = new_text
+    new_record['id'] = f"{record['id']}-{suffix}"
+    return new_record
+
+
+def make_gender_or_foreign_counterfactual(record, parsed, cf_type, gender_cond_dist, df):
+    """
+    cf_type: 'gender' (male -> female) or 'foreign' (non-foreign -> foreign).
+    Only called on records that already passed the privileged+bad-label filter.
+    """
+    text = parsed['text']
+
+    if cf_type == 'gender':
+        target_gender = 'female'  # we only ever flip FROM male (privileged) TO female
+        flipped = sample_gender_attributes(target_gender, gender_cond_dist)
+        new_status_code = flip_personal_status(parsed['status_code'], df)
+
+        text = replace_field_value(text, "Personal status and sex", STATUS_MAP[new_status_code])
+        text = replace_field_value(text, "Present employment since", EMPLOYMENT_MAP[flipped['employment_since']])
+        text = replace_field_value(text, "Housing", HOUSING_MAP[flipped['housing']])
+        suffix = "gender-cf"
+
+    elif cf_type == 'foreign':
+        text = replace_field_value(text, "foreign worker", "yes")  # non-foreign -> foreign
+        suffix = "foreign-cf"
+
     else:
-        original_bucket = "old"
-    
-    # Return all representative bucket ages except the one original belongs to
-    counterfactual_ages = []
-    
-    for name, rep_age in buckets.items():
-        if name != original_bucket:
-            counterfactual_ages.append(rep_age)
-    
-    return counterfactual_ages
+        raise ValueError(f"Unknown cf_type: {cf_type}")
 
-# ages = [22, 25, 30, 35, 40, 45, 52, 60, 67, 75]
-
-# buckets = create_age_buckets(ages)
-# print("Buckets:", buckets)
-
-# original_age = 27
-# cf_ages = generate_counterfactual_ages(original_age, buckets)
-# print("Counterfactual ages:", cf_ages)
+    return build_record_with_text(record, text, suffix)
 
 
-IDENTIFIER_MAP = {
-    "cc_Fraud": "The client is a female, the state number is 25, the number of cards is 1, the credit balance is 7000, the number of transactions is 16, the number of international transactions is 0, the credit limit is 6.",
-    "german": "The client has a stable income, no previous debts, and owns a property.",
-    "travel_insurance": ('The insurance company has attributes: Agency: CBH, Agency Type: '
-                 'Travel Agency, Distribution Chanel: Offline, Product Name: Comprehensive '
-                 'Plan, Duration: 186, Destination: MALAYSIA, Net Sales: -29, Commision: 9.57, Age: 81.')  
-}
-
-AGE_IDENTIFIER_MAP = {
-    "german": "The state of Age in years is ",
-    "travel_insurance": "Age: " 
-}
-
-def extract_ages_from_json(json_path, dataset_name):
-    IDENTIFIER = IDENTIFIER_MAP[dataset_name]
-    age_identifier = AGE_IDENTIFIER_MAP[dataset_name]
-    ages = []
-
-    # Load entire JSON file
-    data_list = []
-    with open(json_path, "r", encoding="utf-8") as f:
-        for line in f:
-            if line.strip():  # skip empty lines
-                data_list.append(json.loads(line))
-
-    # Scan each record
-    for record in data_list:
-        conversations = record.get("conversations", [])
-        
-        # Find the human message
-        for convo in conversations:
-            if convo.get("from") != "human":
-                continue
-
-            value = convo.get("value", "")
-
-            # Check if this is a record of interest
-            if IDENTIFIER not in value:
-                continue  # Skip this record
-
-            # Extract the text after '\nText:'
-            text_match = re.search(r"Text:\s*'(.*?)'", value, flags=re.DOTALL)
-            if not text_match:
-                continue
-
-            text_block = text_match.group(1)
-
-            age_match = re.search(rf"{age_identifier}(\d+)", text_block)
-            if age_match:
-                ages.append(int(age_match.group(1)))
-
-    return ages
-
-train_filename = '/Users/himanshu/Documents/Projects/CALM-train-TrustworthyNLP/train/data/CRA-resample-train4w_original.json'
-german_ages = extract_ages_from_json(train_filename, "german")
-print(f"Are all {len(german_ages)} German age integers: ", all(isinstance(x, int) for x in german_ages))
-travel_insurance_ages = extract_ages_from_json(train_filename, "travel_insurance")
-print(f"Are all {len(travel_insurance_ages)} Travel Insurance age integers: ", all(isinstance(x, int) for x in travel_insurance_ages))
-
-# Creating age buckets
-german_age_bucket = create_age_buckets(german_ages)
-print("german_age_bucket: ", german_age_bucket)
-travel_insurance_age_bucket = create_age_buckets(travel_insurance_ages)
-print("travel_insurance_age_bucket: ", travel_insurance_age_bucket)
-
-def cc_toggle_gender_in_text(input_dict):
+def make_age_counterfactual(record, parsed, age_cond_dist):
     """
-    Takes the full dictionary, finds the human message in conversations,
-    detects the line following '\nText:', and flips 'male' <-> 'female' 
-    ONLY inside that Text block. Returns a modified copy of the dictionary.
+    Only called on YOUNG records (either label). Flips to an 'old' profile,
+    keeping the original label unchanged.
     """
-    
-    # Create a deep copy so original is untouched
-    data = copy.deepcopy(input_dict)
-    
-    # Find human message
-    for convo in data.get("conversations", []):
-        if convo.get("from") == "human":
-            value = convo.get("value", "")
+    flipped = sample_old_attributes(age_cond_dist)
 
-            # Locate the block starting after '\nText:'
-            # Example target: Text: 'The client is a female, ...'
-            match = re.search(r"(Text:\s*')(.*?)(')", value, flags=re.DOTALL)
-            if not match:
-                return data  # Nothing to modify
-            
-            prefix, text_block, suffix = match.groups()
+    text = replace_field_value(parsed['text'], "Age in years", str(flipped['age']))
+    text = replace_field_value(text, "Present employment since", EMPLOYMENT_MAP[flipped['employment_since']])
+    text = replace_field_value(text, "Housing", HOUSING_MAP[flipped['housing']])
 
-            # Toggle male ↔ female safely using placeholder
-            updated_text = (
-                text_block
-                .replace("female", "__TEMP_FEMALE__")
-                .replace("male", "female")
-                .replace("__TEMP_FEMALE__", "male")
+    suffix = f"age-cf-{parsed['label']}"  # e.g. age-cf-good / age-cf-bad, for traceability
+    return build_record_with_text(record, text, suffix)
+
+
+# ---------------------------------------------------------------------------
+# Part 6: main entry point
+# ---------------------------------------------------------------------------
+
+def generate_counterfactuals(train_data_path, df, output_path=None):
+    with open(train_data_path, 'r', encoding='utf-8') as f:
+        records = json.load(f)
+
+    df = df.copy()
+    df['age_group'] = df['age'].apply(_age_group)
+    age_cond_dist = build_conditional_distributions_joint(df, 'age_group')
+    gender_cond_dist = build_conditional_distributions_joint(df, 'gender')
+
+    counterfactual_records = []
+    skipped = 0
+    counts = {'gender': 0, 'foreign': 0, 'age_good': 0, 'age_bad': 0}
+
+    for record in records:
+        parsed = parse_german_record(record)
+        if parsed is None:
+            continue  # not a (parseable) German record
+
+        # --- Gender: only privileged group (male) + unfavorable label (bad) ---
+        if parsed['gender'] == 'male' and parsed['label'] == 'bad':
+            new_record = make_gender_or_foreign_counterfactual(
+                record, parsed, 'gender', gender_cond_dist, df
             )
+            if new_record:
+                counterfactual_records.append(new_record)
+                counts['gender'] += 1
 
-            # Rebuild updated value
-            updated_value = value.replace(prefix + text_block + suffix,
-                                          prefix + updated_text + suffix)
-            
-            convo["value"] = updated_value
+        # --- Foreigner: only privileged group (non-foreign) + unfavorable label (bad) ---
+        if parsed['foreign'] == 'no' and parsed['label'] == 'bad':
+            new_record = make_gender_or_foreign_counterfactual(
+                record, parsed, 'foreign', gender_cond_dist, df
+            )
+            if new_record:
+                counterfactual_records.append(new_record)
+                counts['foreign'] += 1
 
-    return data
+        # --- Age: only young records, both labels, kept separate ---
+        if _age_group(parsed['age']) == 'young':
+            new_record = make_age_counterfactual(record, parsed, age_cond_dist)
+            if new_record:
+                counterfactual_records.append(new_record)
+                counts[f"age_{parsed['label']}"] += 1
 
-def german_compute_new_age(current_age: int) -> int:
-    """
-    Replace this logic with whatever transformation you want for age.
-    For now, as an example, return current_age + 1.
-    """
-    return current_age + 1
+    print(f"Generated {len(counterfactual_records)} counterfactual records.")
+    print(f"  Gender (male+bad -> female+bad):    {counts['gender']}")
+    print(f"  Foreign (non-foreign+bad -> foreign+bad): {counts['foreign']}")
+    print(f"  Age, good-labeled (young -> old):   {counts['age_good']}")
+    print(f"  Age, bad-labeled  (young -> old):   {counts['age_bad']}")
+
+    if output_path:
+        with open(output_path, 'w', encoding='utf-8') as f:
+            json.dump(counterfactual_records, f, indent=2)
+        print(f"Saved to {output_path}")
+
+    return counterfactual_records
 
 
-def german_transform_text_rules(text_block, age_bucket = german_age_bucket):
-    """
-    Applies rule-based transformations to the Text block:
-      - Flip male <-> female
-      - Flip foreign worker yes <-> no
-      - Replace the age with a transformed age n0 = compute_new_age(current_age)
-    """
+if __name__ == "__main__":
+    col_names = ['checking_status', 'duration', 'credit_history', 'purpose', 'credit_amount',
+                 'savings', 'employment_since', 'installment_rate', 'personal_status_sex',
+                 'other_debtors', 'residence_since', 'property', 'age', 'other_installment_plans',
+                 'housing', 'existing_credits', 'job', 'num_liable', 'telephone', 'foreign_worker',
+                 'class']
 
-    # 1. ---- Flip male <-> female ----
-    text = (text_block
-        .replace("male", "__TEMP_MALE__")
-        .replace("female", "male")
-        .replace("__TEMP_MALE__", "female")
+    df = pd.read_csv(
+        '/Users/himanshu/Documents/Projects/CALM-train-TrustworthyNLP/data/original_data/credit_scoring/German/german.data',
+        sep=r'\s+', names=col_names
     )
+    df['gender'] = df['personal_status_sex'].map(GENDER_MAP)
 
-    # 2. ---- Flip foreign worker yes <-> no ----
-    text = (text
-        .replace("foreign worker is yes", "foreign worker is __TEMP_FW__")
-        .replace("foreign worker is no", "foreign worker is yes")
-        .replace("foreign worker is __TEMP_FW__", "foreign worker is no")
-    )
+    TRAIN_DATA_PATH = "train/data/CRA-resample-train4w.json"
+    OUTPUT_PATH = "train/data/CRA-german-counterfactuals.json"
 
-    # 3. ---- Replace Age in years X -> computed n0 ----
-    random.seed(1234)
-    age_match = re.search(r"Age in years is (\d+)", text)
-    if age_match:
-        current_age = int(age_match.group(1))
-        new_age = random.choice(generate_counterfactual_ages(current_age, age_bucket))
-        text = re.sub(
-            r"Age in years is \d+",
-            f"Age in years is {new_age}",
-            text
-        )
-
-    return text
-
-
-def german_transform_dictionary(input_dict, age_bucket = german_age_bucket):
-    """
-    Finds the human message, extracts the \\nText block, applies transformations,
-    and returns the full modified dictionary.
-    """
-
-    data = copy.deepcopy(input_dict)
-
-    for convo in data.get("conversations", []):
-        if convo.get("from") == "human":
-            value = convo.get("value", "")
-
-            # Extract the content inside: Text: ' ... '
-            match = re.search(r"(Text:\s*')(.*?)(')", value, flags=re.DOTALL)
-            if not match:
-                return data
-
-            prefix, text_block, suffix = match.groups()
-
-            # Apply the rule-based transformation
-            updated_text = german_transform_text_rules(text_block, age_bucket = german_age_bucket)
-
-            # Update the entire message
-            updated_value = value.replace(
-                prefix + text_block + suffix,
-                prefix + updated_text + suffix
-            )
-
-            convo["value"] = updated_value
-
-    return data
-
-def trin_compute_new_age(current_age: int) -> int:
-    """
-    Replace this with your true age transformation logic.
-    Example: return current_age + 5
-    """
-    return current_age + 5
-
-
-def trin_transform_text_age(text_block, age_bucket = travel_insurance_age_bucket):
-    """
-    Finds 'Age: N' inside the Text block, computes a new age using compute_new_age(),
-    and replaces the old age with the computed one.
-    """
-    random.seed(1234)
-    age_match = re.search(r"Age:\s*(\d+)", text_block)
-    if age_match:
-        current_age = int(age_match.group(1))
-        new_age = random.choice(generate_counterfactual_ages(current_age, age_bucket))
-
-        # Replace only the age number
-        text_block = re.sub(
-            r"Age:\s*\d+",
-            f"Age: {new_age}",
-            text_block
-        )
-
-    return text_block
-
-
-def trin_transform_dictionary_age_only(input_dict, age_bucket = travel_insurance_age_bucket):
-    """
-    Finds the human message, extracts the \\nText block,
-    applies only the Age transformation, and returns the full dictionary.
-    """
-
-    data = copy.deepcopy(input_dict)
-
-    for convo in data.get("conversations", []):
-        if convo.get("from") == "human":
-            value = convo.get("value", "")
-
-            # Extract content inside: Text: ' ... '
-            match = re.search(r"(Text:\s*')(.*?)(')", value, flags=re.DOTALL)
-            if not match:
-                return data
-
-            prefix, text_block, suffix = match.groups()
-
-            # Apply only the age update
-            updated_text = trin_transform_text_age(text_block, age_bucket = travel_insurance_age_bucket)
-
-            # Rebuild the updated message
-            updated_value = value.replace(
-                prefix + text_block + suffix,
-                prefix + updated_text + suffix
-            )
-            convo["value"] = updated_value
-
-    return data
-
-IDENTIFIER_MAP = {
-    "cc_Fraud": "The client is a female, the state number is 25, the number of cards is 1, the credit balance is 7000, the number of transactions is 16, the number of international transactions is 0, the credit limit is 6.",
-    "german": "The client has a stable income, no previous debts, and owns a property.",
-    "travel_insurance": ('The insurance company has attributes: Agency: CBH, Agency Type: '
-                 'Travel Agency, Distribution Chanel: Offline, Product Name: Comprehensive '
-                 'Plan, Duration: 186, Destination: MALAYSIA, Net Sales: -29, Commision: 9.57, Age: 81.')  
-}
-
-def create_counter_factual_records(json_path, identifier_map = IDENTIFIER_MAP):
-    # Load entire JSON file
-    data_list = []
-    with open(json_path, "r", encoding="utf-8") as f:
-        for line in f:
-            if line.strip():  # skip empty lines
-                data_list.append(json.loads(line))
-
-    german_cnt, trin_cnt, ccFraud_cnt = 0, 0, 0
-    german_records, trin_records, ccFraud_records = [], [], []
-    
-    # Scan each record
-    for record in data_list:
-        conversations = record.get("conversations", [])
-        
-        # Find the human message
-        for convo in conversations:
-            if convo.get("from") != "human":
-                continue
-
-            value = convo.get("value", "")
-
-            # Check if this is a record of interest
-            if IDENTIFIER_MAP["cc_Fraud"] in value:
-                ccFraud_records.append(cc_toggle_gender_in_text(record))
-                ccFraud_cnt += 1
-                break
-            elif IDENTIFIER_MAP["german"] in value:
-                german_records.append(german_transform_dictionary(record))
-                german_cnt += 1
-                break
-            elif IDENTIFIER_MAP["travel_insurance"] in value:
-                trin_records.append(trin_transform_dictionary_age_only(record))
-                trin_cnt += 1
-                break
-
-    random.seed(1234)
-    trin_records = random.sample(trin_records, trin_cnt//2)
-    ccFraud_records = random.sample(ccFraud_records, ccFraud_cnt//2)
-
-    data_list.extend(german_records + trin_records + ccFraud_records)
-
-    print(f"Created {ccFraud_cnt//2} records for ccFraud, {german_cnt} records for German, and {trin_cnt//2} for Travel Insurance. \n Total: {german_cnt + trin_cnt//2 + ccFraud_cnt//2}")
-    return data_list
-
-
-def save_as_json_lines(data, file_path):
-    """
-    data: list of dicts
-    file_path: path ending with .json
-    """
-    with open(file_path, "w", encoding="utf-8") as f:
-        for item in data:
-            json_line = json.dumps(item, ensure_ascii=False)
-            f.write(json_line + "\n")
-
-pp = create_counter_factual_records('/Users/himanshu/Documents/Projects/CALM-train-TrustworthyNLP/train/data/CRA-resample-train4w_original.json')
-save_as_json_lines(pp, '/Users/himanshu/Documents/Projects/CALM-train-TrustworthyNLP/train/data/CRA-resample-train4w.json')
+    generate_counterfactuals(TRAIN_DATA_PATH, df, output_path=OUTPUT_PATH)
