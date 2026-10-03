@@ -1,13 +1,13 @@
 #!/bin/bash
-#SBATCH --job-name=trustworthy_nlp_calm_llama31
-#SBATCH --output=/scratch/user/paridahimanshu0610/trustworthy_nlp/CALM-train-TrustworthyNLP/train/trustworthy_nlp_calm_llama31.out
+#SBATCH --job-name=trustworthy_nlp_calm_llama31_cf
+#SBATCH --output=/scratch/user/paridahimanshu0610/trustworthy_nlp/CALM-train-TrustworthyNLP/train/trustworthy_nlp_calm_llama31_cf.out
 #SBATCH --partition=gpu
 #SBATCH --gres=gpu:a100:2
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=2
 #SBATCH --cpus-per-task=8
 #SBATCH --mem-per-cpu=8G
-#SBATCH -t 56:00:00
+#SBATCH -t 60:00:00
 
 ###############################
 # Load the same modules used to create the venv
@@ -35,7 +35,7 @@ python -c "import transformers; print('transformers version:', transformers.__ve
 ###############################
 # DO NOT set CUDA_VISIBLE_DEVICES manually — Slurm handles this.
 
-export WANDB_PROJECT=CRA-llama3.1-8b-instruct
+export WANDB_PROJECT=CRA-llama3.1-8b-instruct-cf
 export WANDB_RUN_ID=CRA_0.045M
 # export WANDB_RESUME=allow
 # export WANDB_API_KEY=YOUR_WANDB_KEY   # <-- Replace manually
@@ -48,7 +48,7 @@ export PYTHONPATH="$ABS_PATH/train"
 
 model_name_or_path="$ABS_PATH/models/Llama-3.1-8B-Instruct"
 
-train_file="$ABS_PATH/train/data/CRA-resample-train4w.json"
+train_file="$ABS_PATH/train/data/CRA-german-counterfactuals-train.json"
 validation_file="$ABS_PATH/train/data/CRA-resample-dev3k.json"
 
 output_dir="$ABS_PATH/train/saved_models/${WANDB_PROJECT}_${WANDB_RUN_ID}"
@@ -64,7 +64,7 @@ deepspeed_config_stage3="$ABS_PATH/train/configs/deepspeed_config_stage3.json"
 
 cutoff_len=2048
 
-echo "Logging to: ${log_dir}/train.log"
+echo "Logging to: ${log_dir}/train_cf.log"
 
 ###############################
 # Training (2 × A100 GPUs)
@@ -95,5 +95,4 @@ torchrun --nproc_per_node=2 /scratch/user/paridahimanshu0610/trustworthy_nlp/CAL
     --gradient_checkpointing \
     --cache_dir ${cache_dir} \
     --output_dir ${output_dir} \
-    --overwrite_output_dir \
-    > ${log_dir}/train.log 2>&1
+    > ${log_dir}/train_cf.log 2>&1

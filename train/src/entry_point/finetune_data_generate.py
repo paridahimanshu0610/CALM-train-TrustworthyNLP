@@ -9,6 +9,17 @@ Targeted (not uniform) augmentation, per our bias diagnosis:
   - Age: flip YOUNG records to OLD, split by label:
       young+good -> old+good   (targets the EOD / false-negative gap)
       young+bad  -> old+bad    (targets the FPR / false-positive gap)
+
+Actual Description:
+    - For Gender and Foreigner (shortcut/leniency bias): Counterfactual data augmentation is actually well-suited here, 
+    and you can keep using it — but make it targeted at the false-positive cases specifically, not applied uniformly. 
+    Concretely: take the non-creditworthy (unfavorable-label) training examples for the privileged group (men, non-foreigners), 
+    create their counterfactual pairs (swap to female/foreigner, keep label unfavorable), and oversample these specific pairs in fine-tuning. 
+    This directly targets the exact failure mode you measured (FPR gap) rather than counterfactually augmenting the whole dataset uniformly, 
+    which wouldn't necessarily concentrate correction where the error actually lives.
+    - Age augmentation plan: 
+        a. Young + truly-good → counterfactual old + good (fixes the false-negative / under-recognition problem for old applicants — the EOD gap); 
+        b. Young + truly-bad → counterfactual old + bad (fixes the false-positive / over-approval problem for old applicants — the FPR gap)
 """
 
 import json
@@ -268,8 +279,8 @@ def make_age_counterfactual(record, parsed, age_cond_dist):
 # ---------------------------------------------------------------------------
 
 def generate_counterfactuals(train_data_path, df, output_path=None):
-    with open(train_data_path, 'r', encoding='utf-8') as f:
-        records = json.load(f)
+    with open(train_data_path, "r", encoding="utf-8") as f:
+        records = [json.loads(line) for line in f if line.strip()]
 
     df = df.copy()
     df['age_group'] = df['age'].apply(_age_group)
@@ -317,8 +328,10 @@ def generate_counterfactuals(train_data_path, df, output_path=None):
     print(f"  Age, bad-labeled  (young -> old):   {counts['age_bad']}")
 
     if output_path:
-        with open(output_path, 'w', encoding='utf-8') as f:
-            json.dump(counterfactual_records, f, indent=2)
+        with open(output_path, "w", encoding="utf-8") as f:
+            combined_records = records + counterfactual_records
+            for record in combined_records:
+                f.write(json.dumps(record, ensure_ascii=False) + "\n")
         print(f"Saved to {output_path}")
 
     return counterfactual_records
@@ -331,13 +344,15 @@ if __name__ == "__main__":
                  'housing', 'existing_credits', 'job', 'num_liable', 'telephone', 'foreign_worker',
                  'class']
 
+    project_root = "/Users/himanshu/Documents/Projects/CALM-train-TrustworthyNLP"
+    original_data_path = f"{project_root}/data/original_data/credit_scoring/German/german.data"
     df = pd.read_csv(
-        '/Users/himanshu/Documents/Projects/CALM-train-TrustworthyNLP/data/original_data/credit_scoring/German/german.data',
+        original_data_path,
         sep=r'\s+', names=col_names
     )
     df['gender'] = df['personal_status_sex'].map(GENDER_MAP)
 
-    TRAIN_DATA_PATH = "train/data/CRA-resample-train4w.json"
-    OUTPUT_PATH = "train/data/CRA-german-counterfactuals.json"
+    TRAIN_DATA_PATH = f"{project_root}/train/data/CRA-resample-train4w.json"
+    OUTPUT_PATH = f"{project_root}/train/data/CRA-german-counterfactuals-train.json"
 
     generate_counterfactuals(TRAIN_DATA_PATH, df, output_path=OUTPUT_PATH)
