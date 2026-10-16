@@ -11,12 +11,15 @@
 
 ###################################
 # Usage:
-#   sbatch run_inference.sh FILE_TYPES=<val> SMOKE_TEST=<val> SMOKE_TEST_N=<val> \
-#       MODELS=<val> LORA_CKPT_PATH=<val> LORA_MODEL_NAME=<val>
+#   sbatch run_inference.sh FILE_TYPES=<val> SYSTEM_MESSAGE=<val> SMOKE_TEST=<val> \
+#       SMOKE_TEST_N=<val> MODELS=<val> LORA_CKPT_PATH=<val> LORA_MODEL_NAME=<val>
 #
 # Any argument may be omitted to use its default. Order doesn't matter.
 #
 #   FILE_TYPES      : test | bias | both   (default: both)
+#   SYSTEM_MESSAGE  : true | false         (default: false)
+#                     If true, adds a system message built from each dataset's
+#                     choices, and appends "-sysmsg" to the output folder name.
 #   SMOKE_TEST      : true | false         (default: false)
 #   SMOKE_TEST_N    : integer              (default: 5, only used if SMOKE_TEST=true)
 #   MODELS          : base | lora | both   (default: both)
@@ -32,6 +35,9 @@
 # Examples:
 #   sbatch run_inference.sh FILE_TYPES=bias MODELS=base
 #       # base model only
+#
+#   sbatch run_inference.sh FILE_TYPES=both MODELS=base SYSTEM_MESSAGE=true
+#       # base model only, with the system message
 #
 #   sbatch run_inference.sh FILE_TYPES=bias MODELS=lora \
 #       LORA_CKPT_PATH=/scratch/.../saved_models/CRA-llama3.1-8b-instruct_CRA_0.045M/checkpoint-7010
@@ -54,11 +60,13 @@ SMOKE_TEST_N="5"
 MODELS="both"
 LORA_CKPT_PATH=""
 LORA_MODEL_NAME=""
+SYSTEM_MESSAGE="false"
 
 # Parse KEY=VALUE arguments (order-independent)
 for arg in "$@"; do
     case "${arg}" in
         FILE_TYPES=*)      FILE_TYPES="${arg#*=}" ;;
+        SYSTEM_MESSAGE=*)  SYSTEM_MESSAGE="${arg#*=}" ;;
         SMOKE_TEST=*)      SMOKE_TEST="${arg#*=}" ;;
         SMOKE_TEST_N=*)    SMOKE_TEST_N="${arg#*=}" ;;
         MODELS=*)          MODELS="${arg#*=}" ;;
@@ -72,6 +80,7 @@ done
 
 echo "Parsed arguments:"
 echo "  FILE_TYPES=${FILE_TYPES}"
+echo "  SYSTEM_MESSAGE=${SYSTEM_MESSAGE}"
 echo "  SMOKE_TEST=${SMOKE_TEST}"
 echo "  SMOKE_TEST_N=${SMOKE_TEST_N}"
 echo "  MODELS=${MODELS}"
@@ -110,6 +119,9 @@ source /scratch/user/paridahimanshu0610/trustworthy_nlp/calm_env/bin/activate
 export ABS_PATH="/scratch/user/paridahimanshu0610/trustworthy_nlp/CALM-train-TrustworthyNLP"
 export PYTHONPATH="$ABS_PATH/train"
 
+# Compute nodes have little/no internet; never try to reach the HF hub.
+export HF_HUB_OFFLINE=1
+
 # Base model - must already be downloaded locally (see note below).
 model_name_or_path="$ABS_PATH/models/Llama-3.1-8B-Instruct"
 
@@ -119,11 +131,16 @@ mkdir -p "${inference_dir}"
 echo "Base Model: ${model_name_or_path}"
 
 ###################################
-# Build optional smoke-test flags
+# Build optional flags
 ###################################
 SMOKE_FLAGS=""
 if [ "${SMOKE_TEST}" = "true" ]; then
     SMOKE_FLAGS="--smoke_test --smoke_test_n ${SMOKE_TEST_N}"
+fi
+
+SYS_FLAGS=""
+if [ "${SYSTEM_MESSAGE}" = "true" ]; then
+    SYS_FLAGS="--use_system_message"
 fi
 
 ###################################
@@ -140,8 +157,9 @@ if [ "${MODELS}" = "base" ] || [ "${MODELS}" = "both" ]; then
         --query_key_test chat_query \
         --query_key_bias normal_query \
         --batch_size 8 \
+        ${SYS_FLAGS} \
         ${SMOKE_FLAGS} \
-        > "${inference_dir}/inference_base_${FILE_TYPES}_${SMOKE_TEST}.log" 2>&1
+        > "${inference_dir}/inference_base_${FILE_TYPES}_${SMOKE_TEST}_sys${SYSTEM_MESSAGE}.log" 2>&1
 
     echo "Base model inference completed!"
 fi
@@ -162,8 +180,9 @@ if [ "${MODELS}" = "lora" ] || [ "${MODELS}" = "both" ]; then
         --query_key_test chat_query \
         --query_key_bias normal_query \
         --batch_size 8 \
+        ${SYS_FLAGS} \
         ${SMOKE_FLAGS} \
-        > "${inference_dir}/inference_lora_${LORA_MODEL_NAME}_${FILE_TYPES}_${SMOKE_TEST}.log" 2>&1
+        > "${inference_dir}/inference_lora_${LORA_MODEL_NAME}_${FILE_TYPES}_${SMOKE_TEST}_sys${SYSTEM_MESSAGE}.log" 2>&1
 
     echo "LoRA checkpoint inference completed!"
 fi
